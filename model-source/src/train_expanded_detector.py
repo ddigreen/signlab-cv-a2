@@ -27,6 +27,7 @@ import zipfile
 MODEL_ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_ROOT = MODEL_ROOT.parent
 DEFAULT_CONFIG = MODEL_ROOT / "configs/expanded-experiment.json"
+EXPORT_ARMS = ("original", "expanded", "expanded_synthetic")
 
 
 def show_table(value):
@@ -43,13 +44,16 @@ def clear_docstrings(message):
                 clear_docstrings(child)
 
 
-def export_checkpoint(checkpoint, output, experiment, record=None):
+def export_checkpoint(checkpoint, output, experiment, record=None, arm=None):
     """Export without writing generated files beside the editable checkpoint."""
     import onnx
     from ultralytics import YOLO
 
     checkpoint = Path(checkpoint).expanduser().resolve()
     output = Path(output).expanduser().resolve()
+    arm = arm or experiment["selected_arm"]
+    validation_selected_arm = experiment.get("validation_selected_arm", experiment["selected_arm"])
+    is_validation_selected = arm == validation_selected_arm
     if not checkpoint.is_file():
         raise FileNotFoundError(checkpoint)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -65,9 +69,13 @@ def export_checkpoint(checkpoint, output, experiment, record=None):
         properties = {key: value for key, value in old_properties.items() if key in keep}
         properties.update({
             "description": "SignLab traffic-sign detector",
-            "selected_arm": experiment["selected_arm"],
+            "arm": arm,
+            "validation_selected_arm": validation_selected_arm,
+            "is_validation_selected": str(is_validation_selected).lower(),
             "dataset_sha256": experiment["dataset_archive_sha256"],
         })
+        if is_validation_selected:
+            properties["selected_arm"] = arm
         onnx.helper.set_model_props(graph, properties)
         clear_docstrings(graph)
         onnx.checker.check_model(graph)
@@ -76,18 +84,22 @@ def export_checkpoint(checkpoint, output, experiment, record=None):
         outputs = [{"name": value.name, "shape": [d.dim_value for d in value.type.tensor_type.shape.dim]}
                    for value in graph.graph.output]
         if inputs[0]["shape"] != [1, 3, 320, 320] or outputs[0]["shape"] != [1, 8, 2100]:
-            raise ValueError("The selected checkpoint must export the four-class static YOLO11n graph.")
+            raise ValueError("The checkpoint must export the four-class static YOLO11n graph.")
         temporary_output = output.with_name(output.name + ".tmp")
         onnx.save(graph, temporary_output)
         temporary_output.replace(output)
     details = {
-        "selected_arm": experiment["selected_arm"],
+        "arm": arm,
+        "validation_selected_arm": validation_selected_arm,
+        "is_validation_selected": is_validation_selected,
         "onnx_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
         "source_checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
         "opset": 17, "input_shape": [1, 3, 320, 320], "nms_in_graph": False,
         "preprocess": "RGB letterbox, pad114, scale1/255, NCHW",
         "inputs": inputs, "outputs": outputs,
     }
+    if is_validation_selected:
+        details["selected_arm"] = arm
     if record:
         record = Path(record).expanduser().resolve()
         record.parent.mkdir(parents=True, exist_ok=True)
@@ -670,9 +682,13 @@ def main():
     train.add_argument("--weights", type=Path, help="Override the official initialization bundled with the private ZIP.")
     train.add_argument("--no-resume", action="store_true")
     train.add_argument("--checks-only", action="store_true", help="Validate the ZIP, labels and splits and save a private preview.")
-    export = commands.add_parser("export", help="Re-export the selected editable checkpoint without training data.")
-    export.add_argument("--checkpoint", type=Path, default=MODEL_ROOT / "artifacts/detection/original/weights/best.pt")
-    export.add_argument("--output", type=Path, default=PUBLIC_ROOT / "models/detector.onnx")
+    export = commands.add_parser("export", help="Re-export an experiment arm without training data.")
+    export.add_argument("--arm", choices=EXPORT_ARMS,
+                        help="Arm identity. Defaults to original, or infers it from a named checkpoint folder.")
+    export.add_argument("--checkpoint", type=Path,
+                        help="Override artifacts/detection/<arm>/weights/best.pt. Custom paths require --arm.")
+    export.add_argument("--output", type=Path,
+                        help="Override the arm-specific ONNX destination under models/.")
     export.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     export.add_argument("--record", type=Path, help="Optional output export-provenance JSON.")
     args = parser.parse_args()
@@ -680,12 +696,25 @@ def main():
     if args.command == "train":
         train_experiment(args)
     else:
+        checkpoint_arm = None
+        if args.checkpoint and args.checkpoint.parent.name == "weights":
+            folder_arm = args.checkpoint.parent.parent.name
+            if folder_arm in EXPORT_ARMS:
+                checkpoint_arm = folder_arm
+        if args.arm and checkpoint_arm and args.arm != checkpoint_arm:
+            parser.error("--arm disagrees with the arm in the checkpoint folder.")
+        if args.checkpoint and not checkpoint_arm and not args.arm:
+            parser.error("Provide --arm for a checkpoint outside a named arm/weights folder.")
+        arm = args.arm or checkpoint_arm or "original"
+        checkpoint = args.checkpoint or MODEL_ROOT / "artifacts/detection" / arm / "weights/best.pt"
+        filename = "detector.onnx" if arm == "original" else f"detector-{arm.replace('_', '-')}.onnx"
+        output = args.output or PUBLIC_ROOT / "models" / filename
         with tempfile.TemporaryDirectory(prefix="signlab-export-cache-") as cache:
             os.environ.setdefault("YOLO_CONFIG_DIR", str(Path(cache) / "ultralytics"))
             os.environ.setdefault("MPLCONFIGDIR", str(Path(cache) / "matplotlib"))
             os.environ.setdefault("XDG_CACHE_HOME", str(Path(cache) / "cache"))
             experiment = json.loads(args.config.read_text())
-            export_checkpoint(args.checkpoint, args.output, experiment, args.record)
+            export_checkpoint(checkpoint, output, experiment, args.record, arm=arm)
 
 
 if __name__ == "__main__":

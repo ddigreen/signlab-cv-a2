@@ -1,8 +1,8 @@
 # SignLab model source
 
-This folder contains source and editable checkpoint inputs for the browser models. The current detector was selected from the completed 353/453/581-image experiment. The two MobileNetV3 classifiers retain the earlier pilot workflow and measurements.
+This folder contains source and editable checkpoint inputs for the browser models. The default Original detector was selected from the completed 353/453/581-image experiment. The browser also offers the Expanded + synthetic arm for comparison, trained on 453 real images plus 128 synthetic composites. The two MobileNetV3 classifiers retain the earlier pilot workflow and measurements.
 
-## Re-export the current detector
+## Re-export the browser detectors
 
 From this folder, create a Python 3.12 virtual environment and install `requirements-export.txt`. This CPU export environment is recorded separately from the measured CUDA training environment.
 
@@ -11,17 +11,26 @@ python -m pip install -r requirements-export.txt
 python src/train_expanded_detector.py export
 ```
 
-The exporter loads `artifacts/detection/original/weights/best.pt` and writes `../models/detector.onnx`. It uses a temporary copy of the checkpoint, CPU, static 1×3×320×320 input, batch size 1 and ONNX opset 17. The raw 1×8×2100 output requires box decoding and per-class NMS in the browser. Preprocessing is RGB letterboxing with pad value 114 and division by 255. Exported metadata uses portable model information, and graph docstrings are cleared.
+The default exporter loads `artifacts/detection/original/weights/best.pt` and writes `../models/detector.onnx`. Export the comparison arm with its own checkpoint and destination.
+
+```sh
+python src/train_expanded_detector.py export --arm expanded_synthetic
+```
+
+This loads `artifacts/detection/expanded_synthetic/weights/best.pt` and writes `../models/detector-expanded-synthetic.onnx`. The exporter also accepts `--arm expanded` when that checkpoint is available. Every export uses a temporary copy of the checkpoint, CPU, static 1×3×320×320 input, batch size 1 and ONNX opset 17. The raw 1×8×2100 output requires box decoding and per-class NMS in the browser. Preprocessing is RGB letterboxing with pad value 114 and division by 255. Exported metadata uses portable model information, and graph docstrings are cleared.
 
 For a separate verification output, specify its destination and optional provenance record.
 
 ```sh
 python src/train_expanded_detector.py export \
+  --arm expanded_synthetic \
   --output /path/to/export-check/detector.onnx \
   --record /path/to/export-check/export.json
 ```
 
-The source checkpoint has portable metadata. `checkpoint_review.json` records the original and sanitized checkpoint hashes and equality of all 499 stored tensors. Different PyTorch/export environments can change serialized ONNX bytes, so verification should compare topology, tensors and numerical outputs. The shipped ONNX retains the completed training run's export.
+`--checkpoint` overrides the input checkpoint. A path ending in a recognized `<arm>/weights/` folder supplies its arm identity automatically. For other paths, provide `--arm` explicitly. A conflicting arm and checkpoint folder is rejected. Export records distinguish `arm`, `validation_selected_arm` and `is_validation_selected`. The comparison export identifies `expanded_synthetic` and retains `original` as the validation winner.
+
+The source checkpoints have portable metadata. For Original, `checkpoint_review.json` records the original and sanitized checkpoint hashes and equality of all 499 stored tensors. Different PyTorch/export environments can change serialized ONNX bytes, so verification should compare topology, tensors and numerical outputs. The default Original ONNX retains the completed training run's export. The comparison ONNX is exported from that arm's completed best checkpoint using the same settings.
 
 ## Reproduce the three-arm experiment
 
@@ -42,6 +51,8 @@ python src/train_expanded_detector.py train \
 Each arm uses seed 42, batch size 8, AdamW learning rate 0.001, freeze 10, disabled flips and up to 20 epochs with patience 8. The shared parameters are recorded in `configs/expanded-experiment.json`. Matching runs resume `last.pt` or reuse completed training. For changed data, software or settings, choose a fresh `--experiment-name`. Fixed seeds do not guarantee identical results across devices and software builds.
 
 Validation selected `original` with mAP50–95 0.9051286. Test mAP50–95 was 0.8622392 for original, 0.8441348 for expanded and 0.8469105 for expanded plus synthetic. All three test mAP50 values were 0.995. The additions did not improve this inherited test score. Every new frame is training data. Repeated physical signs, source overlap and partial original annotations limit generalization. The synthetic comparison also changes sample count, compositing and optimizer steps. [Recorded experiment](configs/expanded-experiment.json), [validation selection](artifacts/detection/deployment_selection.json).
+
+The browser selector defaults to Original. The comparison can be opened directly with `?detector=expanded_synthetic`. Selecting it changes the model and displayed metrics while the recorded validation decision remains Original. Predictions on the 100 added training frames do not estimate independent performance on those locations.
 
 ## Historical classifiers and generation
 

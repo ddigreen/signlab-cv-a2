@@ -4,12 +4,19 @@
   const NAMES = ['Give way', 'Main road', 'Parking', 'Pedestrian crossing'];
   const COLORS = ['#f7bf5b', '#9bd2ff', '#7de0b7', '#e7a2ff'];
   const SIZE = 320, IOU_THRESHOLD = 0.45;
-  const DETECTOR_REVISION = 't4-three-arm-original-v1';
+  const DETECTOR_REVISION = 't4-model-choice-v5';
+  const DETECTORS = {
+    original: {file:'models/detector.onnx', title:'Original · 353 real', header:'YOLO11n · ORIGINAL DATA'},
+    expanded_synthetic: {file:'models/detector-expanded-synthetic.onnx', title:'Expanded + synthetic · 453 real + 128 synthetic', header:'YOLO11n · EXPANDED + SYNTHETIC'}
+  };
+  const safeArm = value => Object.hasOwn(DETECTORS,value) ? value : 'original';
+  const initialArm = safeArm(new URL(location.href).searchParams.get('detector'));
+  const sessionWork = new WeakMap(), warmedSessions = new WeakSet(), warmingSessions = new WeakMap(), retiredSessions = new WeakSet();
   const ARM_NAMES = {original:'Original real data', expanded:'+100 real frames', expanded_synthetic:'+100 real +128 synthetic'};
   const SOURCE_LABELS = {camera: 'CAMERA', replay: 'SYNTHETIC EXAMPLE REPLAY', video: 'LOCAL VIDEO', image: 'LOCAL IMAGE', sample: 'SYNTHETIC SAMPLE'};
   const $ = id => document.getElementById(id);
   const target = $('detector-canvas'), video = $('detector-video');
-  const state = {session: null, loading: null, running: false, starting: false, stream: null, videoURL: null, image: null, sourceName: '', sourceKind: '', token: 0, timing: [], elapsed: [], processingStarted: null, detections: [], frame: null, warmedUp: false};
+  const state = {arm:initialArm, generation:0, zoom:1, busyOwner:null, metrics:null, retirement:Promise.resolve(), modelSHA256:'', session: null, loading: null, running: false, starting: false, stream: null, videoURL: null, image: null, sourceName: '', sourceKind: '', token: 0, timing: [], elapsed: [], processingStarted: null, detections: [], frame: null, warmedUp: false};
   const conditionNotes = {clean:'Original input. No condition simulation applied.', dark:'Deterministic simulation: multiply source brightness by 0.35.', blur:'Deterministic simulation: 2 px browser blur on the source frame.', low_resolution:'Deterministic simulation: reduce the source to 40 × 40 before resizing.', occlusion:'Deterministic simulation: a central gray patch covers 20% of the source.'};
   const environment = $('device-name')?.textContent || navigator.platform || 'Browser';
   $('detector-device').textContent = environment;
@@ -27,6 +34,7 @@
     $('detector-run-count').textContent = `${state.timing.length} timed frame${state.timing.length === 1 ? '' : 's'} · warm-up excluded`;
   }
   function stop(message = 'Detection stopped.') {
+    hideBusy();
     state.running = false; state.starting = false; state.token++;
     if (state.stream) state.stream.getTracks().forEach(track => track.stop());
     state.stream = null;
@@ -35,39 +43,120 @@
     $('detector-live-badge').classList.add('hidden'); $('detector-stop').disabled = true; $('detector-start').disabled = false;
     if (message) status(message);
   }
+  function showBusy(headline,detail,token=state.token,generation=state.generation) {
+    if(!activeOperation(token,generation))return;
+    state.busyOwner={token,generation};
+    $('detector-busy-title').textContent=headline;$('detector-busy-detail').textContent=detail||'';
+    $('detector-busy').hidden=false;$('detector-busy').classList.remove('hidden');$('detector-view').setAttribute('aria-busy','true');
+  }
+  function hideBusy(token,generation) {
+    const owner=state.busyOwner;
+    if(token!==undefined&&(!owner||owner.token!==token||owner.generation!==generation))return;
+    state.busyOwner=null;$('detector-busy').hidden=true;$('detector-busy').classList.add('hidden');$('detector-view').setAttribute('aria-busy','false');
+  }
+  function currentModel(generation,arm) { return generation===state.generation&&arm===state.arm; }
+  function activeOperation(token,generation) { return token===state.token&&generation===state.generation; }
+  function runSession(session,feeds) {
+    if(retiredSessions.has(session))return Promise.reject(new Error('Detector changed before this run began.'));
+    const previous=sessionWork.get(session)||Promise.resolve();
+    const pending=previous.catch(()=>{}).then(()=>session.run(feeds));
+    sessionWork.set(session,pending.then(()=>{},()=>{}));
+    return pending;
+  }
+  function retireSession(session) {
+    if(!session||retiredSessions.has(session))return Promise.resolve();
+    retiredSessions.add(session);
+    return (sessionWork.get(session)||Promise.resolve()).catch(()=>{}).then(()=>session.release()).catch(e=>console.warn('Detector session release failed',e));
+  }
+  function clearDetectionOutput() {
+    state.detections=[];state.frame=null;state.modelSHA256='';
+    target.getContext('2d').clearRect(0,0,target.width,target.height);target.classList.remove('has-frame');
+    $('detector-placeholder').classList.remove('hidden');$('detector-count').textContent='0';
+    $('detector-list').innerHTML='<p class="tiny">Select an input to run the active detector.</p>';
+    $('detector-source-badge').textContent='NO INPUT';
+    $('detector-model-version').hidden=true;$('detector-model-version').textContent='';$('detector-model-version').removeAttribute('data-sha256');
+    resetTiming();
+  }
+  function updateActiveModel() {
+    const model=DETECTORS[state.arm];
+    $('detector-model-select').value=state.arm;
+    $('detector-active-heading').textContent=model.header;
+    const url=new URL(location.href);url.searchParams.set('detector',state.arm);url.hash='';
+    $('detector-model-link').href=url.href;
+    const data=state.metrics,rows=data?.comparison||[],row=rows.find(r=>r.arm===state.arm&&r.condition==='clean');
+    const validationWinner=data?.selection?.selected_arm||data?.selected_arm||'original';
+    const val=data?.selection?.validation_metrics?.find(r=>r.arm===state.arm);
+    $('detector-selected-arm').hidden=false;
+    $('detector-selected-arm').textContent=`Active: ${model.title}. ${state.arm===validationWinner?'Default validation winner':'Optional comparison model; original remains the validation winner'}${val?` · validation mAP@0.50:0.95 ${percent(val.mAP50_95)}`:''}.`;
+    $('detector-map50').textContent=percent(row?.map50);$('detector-map5095').textContent=percent(row?.map50_95);
+    $('detector-metrics-note').textContent=row?`${model.title} · clean test on ${row.n??row.images??96} original images. Browser simulations do not change these recorded scores.`:'Recorded scores for the active model are loading or unavailable.';
+  }
+  async function switchDetector(value,updateURL=true) {
+    const arm=safeArm(value);if(arm===state.arm){updateActiveModel();return;}
+    const image=state.image,name=state.sourceName,kind=state.sourceKind;
+    stop('');state.generation++;state.arm=arm;
+    const oldLoading=state.loading;state.loading=null;oldLoading?.controller.abort();
+    const oldSession=state.session;state.session=null;state.warmedUp=false;
+    state.retirement=retireSession(oldSession);
+    clearDetectionOutput();error();updateActiveModel();
+    if(updateURL){const url=new URL(location.href);url.searchParams.set('detector',arm);history.replaceState(null,'',url);}
+    status(`${DETECTORS[arm].title} selected. ${image?'Recognizing the same image…':'Start the camera or choose an input to run this model.'}`);
+    if(image)await detectImage(image,name,kind);
+  }
   async function getSession() {
-    if (state.session) return state.session;
-    if (state.loading) return state.loading;
-    if (!window.ort) throw new Error('The local ONNX Runtime library is missing. Restore web/vendor/ from the complete package.');
-    ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = false; ort.env.wasm.wasmPaths = new URL('vendor/', location.href).href;
-    state.loading = (async () => {
-      status('Loading the trained YOLO11n detector…');
-      const response = await fetch(`models/detector.onnx?v=${DETECTOR_REVISION}`,{cache:'no-cache'});
-      if (!response.ok) throw new Error(`The trained detector is unavailable (${response.status}). Expected web/models/detector.onnx. No detection result has been substituted.`);
-      const bytes = await response.arrayBuffer();
-      if (bytes.byteLength < 1000) throw new Error('The detector file is incomplete. Restore the exported ONNX model.');
-      if(crypto.subtle){const digest=await crypto.subtle.digest('SHA-256',bytes);state.modelSHA256=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('');$('detector-model-version').hidden=false;$('detector-model-version').textContent=`Model revision ${state.modelSHA256.slice(0,12)}`;$('detector-model-version').setAttribute('data-sha256',state.modelSHA256);}
-      const session = await ort.InferenceSession.create(bytes, {executionProviders:['wasm'], graphOptimizationLevel:'all'});
-      state.session = session; return session;
+    const generation=state.generation,arm=state.arm,model=DETECTORS[arm],token=state.token;
+    if(state.session)return state.session;
+    if(state.loading&&state.loading.generation===generation)return state.loading.promise;
+    if(!window.ort)throw new Error('The local ONNX Runtime library is missing. Restore web/vendor/ from the complete package.');
+    ort.env.wasm.numThreads=1;ort.env.wasm.proxy=false;ort.env.wasm.wasmPaths=new URL('vendor/',location.href).href;
+    const loading={generation,arm,controller:new AbortController(),promise:null};
+    loading.promise=(async()=>{
+      if(activeOperation(token,generation)){status(`Downloading ${model.title} · about 10 MB. First load depends on your connection…`);showBusy('Loading model · about 10 MB',`${model.title}. First load depends on your connection.`,token,generation);}
+      const response=await fetch(`${model.file}?v=${DETECTOR_REVISION}`,{cache:'no-cache',signal:loading.controller.signal});
+      if(!currentModel(generation,arm))return null;
+      if(!response.ok)throw new Error(`The selected detector is unavailable (${response.status}). Please retry or choose the original model.`);
+      const bytes=await response.arrayBuffer();if(!currentModel(generation,arm))return null;
+      if(bytes.byteLength<1000)throw new Error('The selected detector file is incomplete.');
+      let sha='';
+      if(crypto.subtle){const digest=await crypto.subtle.digest('SHA-256',bytes);sha=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('');}
+      if(!currentModel(generation,arm))return null;
+      if(activeOperation(token,generation)){status(`Preparing ${model.title} in this browser…`);showBusy('Preparing model…',model.title,token,generation);}
+      const session=await ort.InferenceSession.create(bytes,{executionProviders:['wasm'],graphOptimizationLevel:'all'});
+      if(!currentModel(generation,arm)){await retireSession(session);return null;}
+      state.session=session;state.modelSHA256=sha;
+      if(sha){$('detector-model-version').hidden=false;$('detector-model-version').textContent=`Model revision ${sha.slice(0,12)}`;$('detector-model-version').setAttribute('data-sha256',sha);}
+      return session;
     })();
-    try { return await state.loading; } finally { state.loading = null; }
+    state.loading=loading;
+    try{return await loading.promise;}finally{if(state.loading===loading)state.loading=null;}
   }
   async function warmup(session) {
-    if (state.warmedUp) return;
-    status('Warming up the detector…');
-    await session.run({[session.inputNames[0]]:new ort.Tensor('float32',new Float32Array(3*SIZE*SIZE),[1,3,SIZE,SIZE])}); state.warmedUp = true;
+    if(warmedSessions.has(session))return;
+    if(warmingSessions.has(session))return warmingSessions.get(session);
+    if(session===state.session)status('Warming up the active detector…');
+    const pending=runSession(session,{[session.inputNames[0]]:new ort.Tensor('float32',new Float32Array(3*SIZE*SIZE),[1,3,SIZE,SIZE])}).then(()=>{
+      warmedSessions.add(session);if(session===state.session)state.warmedUp=true;
+    });
+    warmingSessions.set(session,pending);
+    try{await pending;}finally{warmingSessions.delete(session);}
   }
   function sourceFrame(source) {
-    const naturalW = source.videoWidth || source.naturalWidth || source.width;
-    const naturalH = source.videoHeight || source.naturalHeight || source.height;
-    if (!naturalW || !naturalH) throw new Error('No source frame is ready.');
-    const resize = Math.min(1, 1600/Math.max(naturalW,naturalH));
-    const width = Math.max(1,Math.round(naturalW*resize)), height = Math.max(1,Math.round(naturalH*resize));
-    const frame = makeCanvas(width,height), ctx = frame.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-    const condition = $('detector-condition').value;
-    if (condition === 'low_resolution') { const low = makeCanvas(40); low.getContext('2d').drawImage(source,0,0,40,40); ctx.drawImage(low,0,0,width,height); }
-    else { ctx.filter = condition === 'dark' ? 'brightness(0.35)' : condition === 'blur' ? 'blur(2px)' : 'none'; ctx.drawImage(source,0,0,width,height); ctx.filter = 'none'; }
-    if (condition === 'occlusion') { const side=Math.sqrt(width*height*0.2); ctx.fillStyle='#808080'; ctx.fillRect((width-side)/2,(height-side)/2,side,side); }
+    const naturalW=source.videoWidth||source.naturalWidth||source.width;
+    const naturalH=source.videoHeight||source.naturalHeight||source.height;
+    if(!naturalW||!naturalH)throw new Error('No source frame is ready.');
+    const zoom=Math.max(1,Math.min(4,Number(state.zoom)||1));
+    const cropW=naturalW/zoom,cropH=naturalH/zoom,sx=(naturalW-cropW)/2,sy=(naturalH-cropH)/2;
+    const resize=Math.min(1,1600/Math.max(cropW,cropH));
+    const width=Math.max(1,Math.round(cropW*resize)),height=Math.max(1,Math.round(cropH*resize));
+    const frame=makeCanvas(width,height),ctx=frame.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    const condition=$('detector-condition').value;
+    if(condition==='low_resolution'){
+      const low=makeCanvas(40);low.getContext('2d').drawImage(source,sx,sy,cropW,cropH,0,0,40,40);ctx.drawImage(low,0,0,width,height);
+    }else{
+      ctx.filter=condition==='dark'?'brightness(0.35)':condition==='blur'?'blur(2px)':'none';
+      ctx.drawImage(source,sx,sy,cropW,cropH,0,0,width,height);ctx.filter='none';
+    }
+    if(condition==='occlusion'){const side=Math.sqrt(width*height*0.2);ctx.fillStyle='#808080';ctx.fillRect((width-side)/2,(height-side)/2,side,side);}
     return frame;
   }
   function prepare(frame) {
@@ -121,61 +210,89 @@
     $('detector-source-badge').textContent = `${simulated ? 'SIMULATED · ' : ''}${SOURCE_LABELS[state.sourceKind] || 'IMAGE'}`;
     state.frame=frame;state.detections=detections;
   }
-  async function infer(source,session,token) {
-    const frameStart=performance.now();if(state.processingStarted===null)state.processingStarted=frameStart;const frame=sourceFrame(source),meta=prepare(frame);
-    const start=performance.now(),outputs=await session.run({[session.inputNames[0]]:new ort.Tensor('float32',meta.tensor,[1,3,SIZE,SIZE])}),inferenceMs=performance.now()-start;
-    if(token!==state.token)return false;
+  async function infer(source,session,token,generation=state.generation) {
+    if(!activeOperation(token,generation))return false;
+    const zoom=state.zoom,frameStart=performance.now();if(state.processingStarted===null)state.processingStarted=frameStart;const frame=sourceFrame(source),meta=prepare(frame);
+    const start=performance.now(),outputs=await runSession(session,{[session.inputNames[0]]:new ort.Tensor('float32',meta.tensor,[1,3,SIZE,SIZE])}),inferenceMs=performance.now()-start;
+    if(!activeOperation(token,generation))return false;
+    if(zoom!==state.zoom)return true; // The next live frame uses the new crop; never display the old crop as new zoom.
     const output=outputs.output0||outputs[session.outputNames[0]],detections=decode(output,meta);draw(frame,detections);updateTiming(inferenceMs,performance.now()-frameStart);
     return true;
   }
-  async function detectImage(image, name, sourceKind = 'image') {
-    stop('');state.image=image;state.sourceName=name;state.sourceKind=sourceKind;resetTiming();error();const token=state.token;
-    try {const session=await getSession();await warmup(session);if(token!==state.token)return;await infer(image,session,token);status(`Detection complete · ${name} · ${state.detections.length} sign${state.detections.length===1?'':'s'} found.`);}
-    catch(e){console.error(e);error(e.message||String(e));status('Detection failed. No substitute result is shown.');}
+  async function detectImage(image,name,sourceKind='image') {
+    stop('');state.image=image;state.sourceName=name;state.sourceKind=sourceKind;resetTiming();error();
+    const token=state.token,generation=state.generation;
+    showBusy(state.session?'Recognizing image…':'Loading model · about 10 MB',DETECTORS[state.arm].title,token,generation);
+    try{
+      const session=await getSession();if(!session||!activeOperation(token,generation))return;
+      showBusy('Preparing model…',DETECTORS[state.arm].title,token,generation);
+      await warmup(session);if(!activeOperation(token,generation))return;
+      showBusy('Recognizing image…',`${state.zoom.toFixed(1)}× centre crop`,token,generation);
+      if(await infer(image,session,token,generation)){hideBusy(token,generation);status(`Detection complete · ${name} · ${state.detections.length} sign${state.detections.length===1?'':'s'} found.`);}
+    }catch(e){if(!activeOperation(token,generation))return;hideBusy(token,generation);console.error(e);error(e.message||String(e));status('Detection failed. No substitute result is shown.');}
   }
-  async function loop(session,token) {
-    try {
-      while(state.running&&token===state.token){
+  async function loop(session,token,generation) {
+    try{
+      while(state.running&&activeOperation(token,generation)){
         if(video.ended){stop(state.sourceKind==='replay'?'Synthetic example replay finished.':'Uploaded video finished. Camera access is released.');break;}
-        if(video.readyState>=2&&!video.paused){await infer(video,session,token);if(token!==state.token)break;status(`${state.sourceKind==='camera'?'Live camera':state.sourceKind==='replay'?'Synthetic example replay':'Uploaded video'} · ${state.detections.length} sign${state.detections.length===1?'':'s'} in the latest frame.`);}
+        if(video.readyState>=2&&!video.paused){
+          if(!await infer(video,session,token,generation))break;
+          status(`${state.sourceKind==='camera'?'Live camera':state.sourceKind==='replay'?'Synthetic example replay':'Uploaded video'} · ${state.detections.length} sign${state.detections.length===1?'':'s'} in the latest frame.`);
+        }
         await new Promise(resolve=>requestAnimationFrame(resolve));
       }
-    }catch(e){console.error(e);stop('Detection stopped after an inference error.');error(e.message||String(e));}
+    }catch(e){if(!activeOperation(token,generation))return;console.error(e);stop('Detection stopped after an inference error.');error(e.message||String(e));}
   }
   async function startCamera() {
-    stop('');error();state.image=null;state.sourceKind='camera';state.sourceName='Live camera';resetTiming();const token=state.token;
+    stop('');error();state.image=null;state.sourceKind='camera';state.sourceName='Live camera';resetTiming();
+    const token=state.token,generation=state.generation;
     $('detector-start').disabled=true;$('detector-stop').disabled=false;state.starting=true;
-    try {
-      const session=await getSession();await warmup(session);if(token!==state.token)return;
+    showBusy(state.session?'Opening camera…':'Loading model · about 10 MB',DETECTORS[state.arm].title,token,generation);
+    try{
+      const session=await getSession();if(!session||!activeOperation(token,generation))return;
+      await warmup(session);if(!activeOperation(token,generation))return;
       if(!navigator.mediaDevices?.getUserMedia)throw new Error('Camera access requires HTTPS or localhost and a supported browser. Upload a photograph or video to continue.');
-      status('Allow camera access in your browser to begin.');
+      status('Allow camera access in your browser to begin.');showBusy('Opening camera…','Allow camera access in your browser to begin.',token,generation);
       const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-      if(token!==state.token){stream.getTracks().forEach(track=>track.stop());return;}
-      state.stream=stream;video.srcObject=stream;await video.play();state.starting=false;state.running=true;$('detector-stop').disabled=false;$('detector-live-badge').classList.remove('hidden');
-      await loop(session,token);
-    }catch(e){stop('Camera detection could not start.');error(e.message||String(e));}
+      if(!activeOperation(token,generation)){stream.getTracks().forEach(track=>track.stop());return;}
+      state.stream=stream;video.srcObject=stream;await video.play();
+      if(!activeOperation(token,generation)){stream.getTracks().forEach(track=>track.stop());return;}
+      hideBusy(token,generation);state.starting=false;state.running=true;$('detector-stop').disabled=false;$('detector-live-badge').classList.remove('hidden');
+      await loop(session,token,generation);
+    }catch(e){if(!activeOperation(token,generation))return;stop('Camera detection could not start.');error(e.message||String(e));}
   }
   async function startReplay() {
-    stop('');error();state.image=null;state.sourceKind='replay';state.sourceName='Synthetic example replay';resetTiming();const token=state.token;state.starting=true;$('detector-stop').disabled=false;$('detector-start').disabled=true;
-    try {
-      const session=await getSession();await warmup(session);if(token!==state.token)return;
-      status('Loading the synthetic example replay…');
-      const response=await fetch('samples/detector-replay.mp4',{method:'HEAD'});
-      if(!response.ok)throw new Error(`The synthetic example replay is unavailable (${response.status}). Expected web/samples/detector-replay.mp4.`);
-      if(token!==state.token)return;video.src='samples/detector-replay.mp4';video.loop=false;await video.play();state.starting=false;state.running=true;
-      await loop(session,token);
-    }catch(e){stop('Synthetic replay could not start.');error(e.message||String(e));}
+    stop('');error();state.image=null;state.sourceKind='replay';state.sourceName='Synthetic example replay';resetTiming();
+    const token=state.token,generation=state.generation;state.starting=true;$('detector-stop').disabled=false;$('detector-start').disabled=true;
+    showBusy(state.session?'Opening replay…':'Loading model · about 10 MB',DETECTORS[state.arm].title,token,generation);
+    try{
+      const session=await getSession();if(!session||!activeOperation(token,generation))return;
+      await warmup(session);if(!activeOperation(token,generation))return;
+      status('Loading the synthetic example replay…');showBusy('Opening replay…','Prepared synthetic examples',token,generation);
+      const response=await fetch('samples/detector-replay.mp4',{method:'HEAD'});if(!activeOperation(token,generation))return;
+      if(!response.ok)throw new Error(`The synthetic example replay is unavailable (${response.status}).`);
+      video.src='samples/detector-replay.mp4';video.loop=false;await video.play();if(!activeOperation(token,generation))return;
+      hideBusy(token,generation);state.starting=false;state.running=true;await loop(session,token,generation);
+    }catch(e){if(!activeOperation(token,generation))return;stop('Synthetic replay could not start.');error(e.message||String(e));}
   }
   async function loadFile(file) {
     if(!file)return;error();
     if(file.type.startsWith('image/')){
+      stop('');state.image=null;const token=state.token,generation=state.generation;
+      showBusy('Opening photo…',file.name,token,generation);
       const url=URL.createObjectURL(file),image=new Image();
-      try{await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('This image could not be decoded.'));image.src=url;});await detectImage(image,file.name);}
-      catch(e){error(e.message);}finally{URL.revokeObjectURL(url);}
+      try{await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('This image could not be decoded.'));image.src=url;});if(!activeOperation(token,generation))return;await detectImage(image,file.name);}
+      catch(e){if(activeOperation(token,generation)){hideBusy(token,generation);error(e.message);}}finally{URL.revokeObjectURL(url);}
     }else if(file.type.startsWith('video/')){
-      stop('');state.image=null;state.sourceKind='video';state.sourceName=file.name;resetTiming();const token=state.token;state.starting=true;$('detector-stop').disabled=false;$('detector-start').disabled=true;
-      try{const session=await getSession();await warmup(session);if(token!==state.token)return;state.videoURL=URL.createObjectURL(file);video.src=state.videoURL;video.loop=false;await video.play();state.starting=false;state.running=true;$('detector-stop').disabled=false;$('detector-start').disabled=true;await loop(session,token);}
-      catch(e){stop('Video detection could not start.');error(e.message||String(e));}
+      stop('');state.image=null;state.sourceKind='video';state.sourceName=file.name;resetTiming();
+      const token=state.token,generation=state.generation;state.starting=true;$('detector-stop').disabled=false;$('detector-start').disabled=true;
+      showBusy(state.session?'Opening video…':'Loading model · about 10 MB',DETECTORS[state.arm].title,token,generation);
+      try{
+        const session=await getSession();if(!session||!activeOperation(token,generation))return;
+        await warmup(session);if(!activeOperation(token,generation))return;
+        state.videoURL=URL.createObjectURL(file);video.src=state.videoURL;video.loop=false;await video.play();if(!activeOperation(token,generation))return;
+        hideBusy(token,generation);state.starting=false;state.running=true;$('detector-stop').disabled=false;$('detector-start').disabled=true;await loop(session,token,generation);
+      }catch(e){if(!activeOperation(token,generation))return;stop('Video detection could not start.');error(e.message||String(e));}
     }else error('Choose an image or video file.');
   }
   async function loadSamples() {
@@ -183,9 +300,11 @@
       const response=await fetch('samples/manifest.json');if(!response.ok)return;const data=await response.json(),rows=data.images||data;
       $('detector-samples').innerHTML=rows.map((row,i)=>`<button class="sample" data-detector-index="${i}" aria-label="Detect signs in synthetic ${escapeText(NAMES[CLASSES.indexOf(row.label)]||row.label)} example"><img src="samples/${escapeText(row.path)}" alt="Synthetic ${escapeText(row.label)} sign scene"><span>${escapeText(NAMES[CLASSES.indexOf(row.label)]||row.label)}</span></button>`).join('');
       $('detector-samples').querySelectorAll('button').forEach(button=>button.addEventListener('click',async()=>{
+        stop('');state.image=null;const token=state.token,generation=state.generation;
+        showBusy('Opening photo…','Synthetic sign example',token,generation);
         const row=rows[Number(button.dataset.detectorIndex)],image=new Image();
-        try{await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=`samples/${row.path}`;});$('detector-samples').querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b===button));await detectImage(image, row.title || row.path, 'sample');}
-        catch(e){error(e.message||'The sample image could not be loaded.');}
+        try{await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=`samples/${row.path}`;});if(!activeOperation(token,generation))return;$('detector-samples').querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b===button));await detectImage(image,row.title||row.path,'sample');}
+        catch(e){if(activeOperation(token,generation)){hideBusy(token,generation);error(e.message||'The sample image could not be loaded.');}}
       }));
     }catch(e){console.warn('Detection samples unavailable',e);}
   }
@@ -201,22 +320,18 @@
       if(!selected||!rows.length)throw new Error('No validation-selected detector metrics are recorded.');
       const dataset=data.dataset||{},validation=data.selection?.validation_metrics||[];
       const selectedValidation=validation.find(row=>row.arm===selectedArm);
-      $('detector-map50').textContent=percent(selected.map50);
-      $('detector-map5095').textContent=percent(selected.map50_95);
-      $('detector-metrics-note').textContent=data.note||'Clean test only. Browser simulations do not update these recorded metrics.';
-      $('detector-selected-arm').hidden=false;
-      $('detector-selected-arm').textContent=`Deployed: YOLO11n · ${ARM_NAMES[selectedArm]||selectedArm} arm. Selected on validation${selectedValidation?` (${percent(selectedValidation.mAP50_95)} mAP@0.50:0.95)`:''} before test evaluation.`;
+      state.metrics=data;updateActiveModel();
       $('detector-stress-note').textContent=data.stress_evaluation?.note||'No quantitative stress evaluation is available for this detector. Controls apply deterministic browser simulations.';
       $('detector-test-outcome').hidden=false;
       $('detector-test-outcome').textContent=`Clean test mAP@0.50:0.95: ${rows.map(row=>`${ARM_NAMES[row.arm]||row.arm} ${percent(row.map50_95)}`).join(' · ')}. Added training data did not improve this metric over the original-data arm.`;
 
       const wrapper=document.createElement('section');wrapper.className='detector-experiment-section';
       wrapper.setAttribute('aria-label','Latest three-arm detector experiment');
-      wrapper.innerHTML='<p class="eyebrow">LATEST DETECTOR STUDY · TESLA T4</p><h2>Three training sets. Original data selected.</h2><p class="result-note">Each detector checkpoint and the deployed arm were selected by validation mAP@0.50:0.95 before the test set was evaluated.</p>';
+      wrapper.innerHTML='<p class="eyebrow">LATEST DETECTOR STUDY · TESLA T4</p><h2>Three training sets. Original data selected.</h2><p class="result-note">Each detector checkpoint and the default arm were selected by validation mAP@0.50:0.95 before the test set was evaluated.</p>';
       wrapper.innerHTML+=`<div class="metrics-summary"><span class="metric-pill"><strong>353 / 453 / 581</strong>training images</span><span class="metric-pill"><strong>${escapeText(dataset.validation_images??120)}</strong>shared validation images</span><span class="metric-pill"><strong>${escapeText(dataset.test_images??96)}</strong>shared test images</span><span class="metric-pill"><strong>${escapeText(dataset.added_real_frames??100)} frames / ${escapeText(dataset.added_real_boxes??169)} boxes</strong>added real annotations</span><span class="metric-pill"><strong>${escapeText(dataset.synthetic_composites??128)}</strong>synthetic composites</span></div>`;
-      wrapper.innerHTML+=`<p id="detector-validation-selection" class="selection-result">Deployed: ${escapeText(ARM_NAMES[selectedArm]||selectedArm)} · validation mAP@0.50:0.95 ${percent(selectedValidation?.mAP50_95)}. The test set did not choose the deployed arm.</p>`;
+      wrapper.innerHTML+=`<p id="detector-validation-selection" class="selection-result">Default validation winner: ${escapeText(ARM_NAMES[selectedArm]||selectedArm)} · validation mAP@0.50:0.95 ${percent(selectedValidation?.mAP50_95)}. The test set did not choose the default model. The optional detector selector changes inference, not this experiment result.</p>`;
       wrapper.innerHTML+='<p class="tiny">Clean evaluation on the original 96-image test set. mAP measures class and bounding-box agreement; these values do not change with browser simulations.</p>';
-      wrapper.innerHTML+='<div class="table-wrap"><table id="detector-results-table"><thead><tr><th scope="col">Training arm</th><th scope="col">Train images / boxes</th><th scope="col">Validation mAP@0.50:0.95</th><th scope="col">Test mAP@0.50</th><th scope="col">Test mAP@0.50:0.95</th><th scope="col">Test precision</th><th scope="col">Test recall</th></tr></thead><tbody>'+rows.map(row=>`<tr${row.arm===selectedArm?' class="selected-detector-row"':''} data-arm="${escapeText(row.arm)}"><td>${escapeText(ARM_NAMES[row.arm]||row.model||row.arm)}${row.arm===selectedArm?' <span class="deployed-label">DEPLOYED</span>':''}</td><td>${escapeText(row.train_images??'—')} / ${escapeText(row.train_boxes??'—')}</td><td>${percent(row.validation_map50_95)}</td><td>${percent(row.map50)}</td><td>${percent(row.map50_95)}</td><td>${percent(row.precision)}</td><td>${percent(row.recall)}</td></tr>`).join('')+'</tbody></table></div>';
+      wrapper.innerHTML+='<div class="table-wrap"><table id="detector-results-table"><thead><tr><th scope="col">Training arm</th><th scope="col">Train images / boxes</th><th scope="col">Validation mAP@0.50:0.95</th><th scope="col">Test mAP@0.50</th><th scope="col">Test mAP@0.50:0.95</th><th scope="col">Test precision</th><th scope="col">Test recall</th></tr></thead><tbody>'+rows.map(row=>`<tr${row.arm===selectedArm?' class="selected-detector-row"':''} data-arm="${escapeText(row.arm)}"><td>${escapeText(ARM_NAMES[row.arm]||row.model||row.arm)}${row.arm===selectedArm?' <span class="deployed-label">VALIDATION SELECTED · DEFAULT</span>':''}</td><td>${escapeText(row.train_images??'—')} / ${escapeText(row.train_boxes??'—')}</td><td>${percent(row.validation_map50_95)}</td><td>${percent(row.map50)}</td><td>${percent(row.map50_95)}</td><td>${percent(row.precision)}</td><td>${percent(row.recall)}</td></tr>`).join('')+'</tbody></table></div>';
       wrapper.innerHTML+=`<p id="detector-stress-results-note" class="study-status-note">${escapeText(data.stress_evaluation?.note||'Stress-condition scores have not been measured for this study.')}</p>`;
       if(data.protocol_description)wrapper.innerHTML+=`<details class="detector-protocol"><summary>Training and evaluation protocol</summary><p class="result-note">${escapeText(data.protocol_description)}</p></details>`;
       const notes=Array.isArray(data.notes)?data.notes:data.notes?[data.notes]:[];
@@ -231,11 +346,14 @@
       console.warn('Recorded detection metrics unavailable',e);
     }
   }
+  $('detector-zoom').addEventListener('input',e=>{state.zoom=Math.max(1,Math.min(4,Number(e.target.value)||1));$('detector-zoom-value').textContent=`${state.zoom.toFixed(1)}×`;resetTiming();});
+  $('detector-zoom').addEventListener('change',()=>{if(state.image)detectImage(state.image,state.sourceName,state.sourceKind);});
+  $('detector-model-select').addEventListener('change',e=>{switchDetector(e.target.value).catch(e=>{console.error(e);error(e.message||String(e));});});
   $('detector-start').addEventListener('click',startCamera);$('detector-replay').addEventListener('click',startReplay);$('detector-stop').addEventListener('click',()=>stop());$('detector-upload').addEventListener('click',()=>$('detector-file').click());$('detector-file').addEventListener('change',e=>loadFile(e.target.files[0]));
   $('detector-condition').addEventListener('change',()=>{$('detector-condition-note').textContent=conditionNotes[$('detector-condition').value];if(state.image)detectImage(state.image,state.sourceName,state.sourceKind);else if(state.running)resetTiming();});
   $('detector-confidence').addEventListener('input',()=>{$('detector-confidence-value').textContent=Number($('detector-confidence').value).toFixed(2);});
   $('detector-confidence').addEventListener('change',()=>{if(state.image)detectImage(state.image,state.sourceName,state.sourceKind);});
   document.addEventListener('signlab:tabchange',e=>{if(e.detail!=='detection'&&(state.running||state.starting||state.stream||state.videoURL))stop('Detection stopped when leaving the detector tab.');});
   window.addEventListener('pagehide',()=>stop(''));document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.sourceKind==='camera'&&(state.running||state.starting||state.stream))stop('Camera detection stopped while the page is hidden.');});
-  loadSamples();loadMetrics();window.SignLabDetector={state,prepare,decode,nms,intersectionOverUnion,detectImage,loadFile,startReplay,stop};
+  updateActiveModel();loadSamples();loadMetrics();window.SignLabDetector={state,sourceFrame,prepare,decode,nms,intersectionOverUnion,detectImage,loadFile,startCamera,startReplay,stop,switchDetector,getSession};
 })();

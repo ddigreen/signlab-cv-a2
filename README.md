@@ -4,11 +4,15 @@ SignLab detects four traffic-sign classes with YOLO11n and classifies images wit
 
 Run the app from this directory with `python3 -m http.server 8000` and open [localhost:8000](http://localhost:8000). Select a synthetic example, choose a local file, or enable the camera. Camera access needs browser permission and a secure context such as localhost or HTTPS.
 
+The detector model selector appears above the frame. Digital zoom crops the center of the original camera or file input before resizing it for inference; keep the sign in the middle. Zoom and condition controls change the interactive input, while recorded validation/test metrics stay fixed. A visible loading card indicates model download, preparation and image recognition.
+
 The deployed app is available at [SignLab on GitHub Pages](https://ddigreen.github.io/signlab-cv-a2/). GitHub Pages serves this directory directly. Keep the assets in their folders so models and the bundled ONNX Runtime resolve under the repository path. The `.nojekyll` file enables static publishing. [GitHub Pages documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages).
 
 ## Current detector experiment
 
-The deployed detector comes from a completed three-arm experiment on a Tesla T4. Every arm started from the same COCO-pretrained YOLO11n weights and trained for 20 epochs with seed 42, 320-pixel inputs, batch size 8, AdamW and the first 10 modules frozen. All arms share the original 120 validation and 96 test images.
+The browser offers two YOLO11n detectors from a completed three-arm experiment on a Tesla T4. The detector selector defaults to **Original**, the validation winner. **Expanded + synthetic** is available for comparison, trained on 453 real images and 128 synthetic composites. A direct link opens that option. [Expanded + synthetic comparison](https://ddigreen.github.io/signlab-cv-a2/?detector=expanded_synthetic).
+
+Every arm started from the same COCO-pretrained YOLO11n weights and trained for 20 epochs with seed 42, 320-pixel inputs, batch size 8, AdamW and the first 10 modules frozen. All arms share the original 120 validation and 96 test images.
 
 | Arm | Training images | Validation mAP50–95 | Test mAP50–95 |
 | --- | ---: | ---: | ---: |
@@ -18,6 +22,8 @@ The deployed detector comes from a completed three-arm experiment on a Tesla T4.
 
 Validation selected **original** before test evaluation. Every arm obtained test mAP50 of 0.995. The 100 added frames contain 169 boxes and belong to training. The synthetic arm adds 128 composites using MaskGen backgrounds. These additions did not improve the original test mAP50–95 in this run. One seed, repeated signs and source dependence, and dominant-target original annotations limit interpretation. The test provides an evaluation under the inherited protocol. New-site and exhaustive multi-object evaluation remain future work. [Recorded experiment](model-source/configs/expanded-experiment.json).
 
+The report and demonstration's selected-model result refers to the default Original detector. Choosing the comparison option uses the expanded-synthetic checkpoint and its own displayed metrics. All 100 added frames were training inputs. Independent evaluation of those locations requires separate held-out data.
+
 ## Classifier pilot and examples
 
 The two MobileNetV3 classifiers and their Grad-CAM measurements come from the earlier 569-image pilot. That rerun achieved 94/96 clean predictions and macro-F1 0.9816. All nine new classifier arm/seed trials selected epoch zero, preserving the starting A1 classifier. These classifier measurements describe a separate task and experiment from the current detector.
@@ -26,6 +32,6 @@ The public examples and replay contain labeled synthetic composites. The Experim
 
 ## Source and license
 
-[Model source and export instructions](model-source/README.md) cover the current three-arm detector CLI, checkpoint export, recorded CUDA environment and historical classifier source. The editable selected detector and official initialization checkpoint are included. Full training uses the user's private data ZIP and a private output directory. The source distribution contains generic code and aggregate records.
+[Model source and export instructions](model-source/README.md) cover the current three-arm detector CLI, arm-specific checkpoint export, recorded CUDA environment and historical classifier source. The editable Original and Expanded + synthetic detectors and official initialization checkpoint are included. Full training uses the user's private data ZIP and a private output directory. The source distribution contains generic code and aggregate records.
 
 SignLab application code and the bundled Ultralytics detector are distributed under AGPL-3.0. Third-party components retain their licenses and notices. [License](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md).

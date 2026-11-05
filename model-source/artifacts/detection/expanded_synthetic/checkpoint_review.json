@@ -1,0 +1,29 @@
+{
+  "arm": "expanded_synthetic",
+  "role": "optional_comparison",
+  "validation_selected_arm": "original",
+  "checkpoint": "artifacts/detection/expanded_synthetic/weights/best.pt",
+  "original_sha256": "39adcf56e323c70d990e906e76b5bdc19d28dec216fa16919b7fa2e73ee41b8e",
+  "sanitized_sha256": "4a39bb978cc8230e915100f1973c3dcc4cfb54d04af94badc0986754be6f909b",
+  "metadata_fields_rewritten": [
+    "model.args.model",
+    "model.args.data",
+    "model.args.project",
+    "model.args.save_dir",
+    "train_args.model",
+    "train_args.data",
+    "train_args.project",
+    "model.pt_path",
+    "git"
+  ],
+  "tensor_count": 499,
+  "all_tensor_values_and_dtypes_equal": true,
+  "export_verification": {
+    "pytorch_onnx_agreement": true,
+    "examples_checked": 12,
+    "maximum_absolute_difference": 0.0019683837890625,
+    "atol": 0.003,
+    "rtol": 0.0001,
+    "test_scope": "Functional export check. Added real frames are training inputs, not an independent evaluation."
+  }
+}
