@@ -1,6 +1,6 @@
 # SignLab model source
 
-This folder contains source and editable checkpoint inputs for the browser models. The default Original detector was selected from the completed 353/453/581-image experiment. The browser also offers the Expanded + synthetic arm for comparison, trained on 453 real images plus 128 synthetic composites. The two MobileNetV3 classifiers retain the earlier pilot workflow and measurements.
+This folder contains source and editable checkpoint inputs for the browser models. The browser defaults to the Expanded + synthetic detector, trained on 453 real images plus 128 synthetic composites. The Original detector remains selectable and was the validation winner in the completed 353/453/581-image experiment. The two MobileNetV3 classifiers retain the earlier pilot workflow and measurements.
 
 ## Re-export the browser detectors
 
@@ -30,7 +30,7 @@ python src/train_expanded_detector.py export \
 
 `--checkpoint` overrides the input checkpoint. A path ending in a recognized `<arm>/weights/` folder supplies its arm identity automatically. For other paths, provide `--arm` explicitly. A conflicting arm and checkpoint folder is rejected. Export records distinguish `arm`, `validation_selected_arm` and `is_validation_selected`. The comparison export identifies `expanded_synthetic` and retains `original` as the validation winner.
 
-The source checkpoints have portable metadata. For Original, `checkpoint_review.json` records the original and sanitized checkpoint hashes and equality of all 499 stored tensors. Different PyTorch/export environments can change serialized ONNX bytes, so verification should compare topology, tensors and numerical outputs. The default Original ONNX retains the completed training run's export. The comparison ONNX is exported from that arm's completed best checkpoint using the same settings.
+The source checkpoints have portable metadata. For Original, `checkpoint_review.json` records the original and sanitized checkpoint hashes and equality of all 499 stored tensors. Different PyTorch/export environments can change serialized ONNX bytes, so verification should compare topology, tensors and numerical outputs. The Original ONNX retains the completed training run's export. The comparison ONNX is exported from that arm's completed best checkpoint using the same settings.
 
 ## Reproduce the three-arm experiment
 
@@ -52,7 +52,7 @@ Each arm uses seed 42, batch size 8, AdamW learning rate 0.001, freeze 10, disab
 
 Validation selected `original` with mAP50–95 0.9051286. Test mAP50–95 was 0.8622392 for original, 0.8441348 for expanded and 0.8469105 for expanded plus synthetic. All three test mAP50 values were 0.995. The additions did not improve this inherited test score. Every new frame is training data. Repeated physical signs, source overlap and partial original annotations limit generalization. The synthetic comparison also changes sample count, compositing and optimizer steps. [Recorded experiment](configs/expanded-experiment.json), [validation selection](artifacts/detection/deployment_selection.json).
 
-The browser selector defaults to Original. The comparison can be opened directly with `?detector=expanded_synthetic`. Selecting it changes the model and displayed metrics while the recorded validation decision remains Original. Predictions on the 100 added training frames do not estimate independent performance on those locations.
+The browser selector defaults to Expanded + synthetic by user request. Original is available through the selector or `?detector=original`. Each choice displays its own metrics while the recorded validation decision remains Original. The exporter still defaults to the validation-selected Original arm; export the browser default explicitly with `--arm expanded_synthetic`. Predictions on the 100 added training frames do not estimate independent performance on those locations.
 
 ## Historical classifiers and generation
 

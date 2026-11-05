@@ -32,7 +32,7 @@
     "node_op_types_and_order_equal": true,
     "node_count": 355,
     "serialized_bytes_equal": false,
-    "note": "The CPU re-export uses a different PyTorch version than the Colab export. The deployed ONNX is the original completed-run export.",
+    "note": "The CPU re-export uses a different PyTorch version than the Colab export. The Original-arm ONNX is the original completed-run export.",
     "deployed_pytorch_onnx_numerical_check": {
       "pytorch_onnx_agreement": true,
       "atol": 0.003,

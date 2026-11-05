@@ -1,6 +1,6 @@
 {
   "arm": "expanded_synthetic",
-  "role": "optional_comparison",
+  "role": "deployment_default_user_choice",
   "validation_selected_arm": "original",
   "checkpoint": "artifacts/detection/expanded_synthetic/weights/best.pt",
   "original_sha256": "39adcf56e323c70d990e906e76b5bdc19d28dec216fa16919b7fa2e73ee41b8e",

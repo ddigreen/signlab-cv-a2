@@ -4,24 +4,35 @@
   const NAMES = ['Give way', 'Main road', 'Parking', 'Pedestrian crossing'];
   const COLORS = ['#f7bf5b', '#9bd2ff', '#7de0b7', '#e7a2ff'];
   const SIZE = 320, IOU_THRESHOLD = 0.45;
-  const DETECTOR_REVISION = 't4-model-choice-v5';
+  const DETECTOR_REVISION = 't4-model-choice-v7';
+  const DEFAULT_DETECTOR = 'expanded_synthetic';
   const DETECTORS = {
     original: {file:'models/detector.onnx', title:'Original · 353 real', header:'YOLO11n · ORIGINAL DATA'},
     expanded_synthetic: {file:'models/detector-expanded-synthetic.onnx', title:'Expanded + synthetic · 453 real + 128 synthetic', header:'YOLO11n · EXPANDED + SYNTHETIC'}
   };
-  const safeArm = value => Object.hasOwn(DETECTORS,value) ? value : 'original';
+  const safeArm = value => Object.hasOwn(DETECTORS,value) ? value : DEFAULT_DETECTOR;
   const initialArm = safeArm(new URL(location.href).searchParams.get('detector'));
   const sessionWork = new WeakMap(), warmedSessions = new WeakSet(), warmingSessions = new WeakMap(), retiredSessions = new WeakSet();
   const ARM_NAMES = {original:'Original real data', expanded:'+100 real frames', expanded_synthetic:'+100 real +128 synthetic'};
   const SOURCE_LABELS = {camera: 'CAMERA', replay: 'SYNTHETIC EXAMPLE REPLAY', video: 'LOCAL VIDEO', image: 'LOCAL IMAGE', sample: 'SYNTHETIC SAMPLE'};
   const $ = id => document.getElementById(id);
   const target = $('detector-canvas'), video = $('detector-video');
-  const state = {arm:initialArm, generation:0, zoom:1, busyOwner:null, metrics:null, retirement:Promise.resolve(), modelSHA256:'', session: null, loading: null, running: false, starting: false, stream: null, videoURL: null, image: null, sourceName: '', sourceKind: '', token: 0, timing: [], elapsed: [], processingStarted: null, detections: [], frame: null, warmedUp: false};
+  const state = {arm:initialArm, generation:0, zoom:1, autoZoomApplied:false, busyOwner:null, metrics:null, retirement:Promise.resolve(), modelSHA256:'', session: null, loading: null, running: false, starting: false, stream: null, videoURL: null, image: null, sourceName: '', sourceKind: '', token: 0, timing: [], elapsed: [], processingStarted: null, detections: [], frame: null, warmedUp: false};
   const conditionNotes = {clean:'Original input. No condition simulation applied.', dark:'Deterministic simulation: multiply source brightness by 0.35.', blur:'Deterministic simulation: 2 px browser blur on the source frame.', low_resolution:'Deterministic simulation: reduce the source to 40 × 40 before resizing.', occlusion:'Deterministic simulation: a central gray patch covers 20% of the source.'};
   const environment = $('device-name')?.textContent || navigator.platform || 'Browser';
   $('detector-device').textContent = environment;
   function status(message) { $('detector-status').textContent = message; }
-  function error(message = '') { $('detector-error').textContent = message; $('detector-error').hidden = !message; }
+  function resetAutomaticZoom() {
+    if(!state.autoZoomApplied)return;
+    state.zoom=1;state.autoZoomApplied=false;
+    $('detector-zoom').value='1';$('detector-zoom-value').textContent='1.0×';
+  }
+  function resultFeedback(kind,title,detail) {
+    $('detector-result').setAttribute('data-state',kind);
+    $('detector-result-title').textContent=title;
+    status(detail);
+  }
+  function error(message = '') { $('detector-error').textContent = message; $('detector-error').hidden = !message; if(message)resultFeedback('error','Recognition failed',message); }
   function escapeText(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function makeCanvas(width, height = width) { const c = document.createElement('canvas'); c.width = width; c.height = height; return c; }
   function resetTiming() { state.timing = []; state.elapsed = []; state.processingStarted = null; $('detector-latency').innerHTML = '—<small>ms</small>'; $('detector-fps').innerHTML = '—<small>FPS</small>'; $('detector-run-count').textContent = 'No timed frames'; }
@@ -41,11 +52,12 @@
     video.pause(); video.srcObject = null;
     if (state.videoURL) { URL.revokeObjectURL(state.videoURL); state.videoURL = null; } video.removeAttribute('src'); video.load();
     $('detector-live-badge').classList.add('hidden'); $('detector-stop').disabled = true; $('detector-start').disabled = false;
-    if (message) status(message);
+    if (message) resultFeedback('idle','Detection stopped',message);
   }
   function showBusy(headline,detail,token=state.token,generation=state.generation) {
     if(!activeOperation(token,generation))return;
     state.busyOwner={token,generation};
+    resultFeedback('processing',headline,detail||'Please wait…');
     $('detector-busy-title').textContent=headline;$('detector-busy-detail').textContent=detail||'';
     $('detector-busy').hidden=false;$('detector-busy').classList.remove('hidden');$('detector-view').setAttribute('aria-busy','true');
   }
@@ -76,6 +88,7 @@
     $('detector-source-badge').textContent='NO INPUT';
     $('detector-model-version').hidden=true;$('detector-model-version').textContent='';$('detector-model-version').removeAttribute('data-sha256');
     resetTiming();
+    resultFeedback('idle','Ready to recognize','Start the camera, upload a photo or video, or choose an example.');
   }
   function updateActiveModel() {
     const model=DETECTORS[state.arm];
@@ -87,7 +100,7 @@
     const validationWinner=data?.selection?.selected_arm||data?.selected_arm||'original';
     const val=data?.selection?.validation_metrics?.find(r=>r.arm===state.arm);
     $('detector-selected-arm').hidden=false;
-    $('detector-selected-arm').textContent=`Active: ${model.title}. ${state.arm===validationWinner?'Default validation winner':'Optional comparison model; original remains the validation winner'}${val?` · validation mAP@0.50:0.95 ${percent(val.mAP50_95)}`:''}.`;
+    $('detector-selected-arm').textContent=`Active: ${model.title}. ${state.arm===DEFAULT_DETECTOR?'App default. ':''}${state.arm===validationWinner?'Validation winner':'Original remains the validation winner'}${val?` · validation mAP@0.50:0.95 ${percent(val.mAP50_95)}`:''}.`;
     $('detector-map50').textContent=percent(row?.map50);$('detector-map5095').textContent=percent(row?.map50_95);
     $('detector-metrics-note').textContent=row?`${model.title} · clean test on ${row.n??row.images??96} original images. Browser simulations do not change these recorded scores.`:'Recorded scores for the active model are loading or unavailable.';
   }
@@ -140,11 +153,11 @@
     warmingSessions.set(session,pending);
     try{await pending;}finally{warmingSessions.delete(session);}
   }
-  function sourceFrame(source) {
+  function sourceFrame(source,requestedZoom=state.zoom) {
     const naturalW=source.videoWidth||source.naturalWidth||source.width;
     const naturalH=source.videoHeight||source.naturalHeight||source.height;
     if(!naturalW||!naturalH)throw new Error('No source frame is ready.');
-    const zoom=Math.max(1,Math.min(4,Number(state.zoom)||1));
+    const zoom=Math.max(1,Math.min(4,Number(requestedZoom)||1));
     const cropW=naturalW/zoom,cropH=naturalH/zoom,sx=(naturalW-cropW)/2,sy=(naturalH-cropH)/2;
     const resize=Math.min(1,1600/Math.max(cropW,cropH));
     const width=Math.max(1,Math.round(cropW*resize)),height=Math.max(1,Math.round(cropH*resize));
@@ -210,25 +223,57 @@
     $('detector-source-badge').textContent = `${simulated ? 'SIMULATED · ' : ''}${SOURCE_LABELS[state.sourceKind] || 'IMAGE'}`;
     state.frame=frame;state.detections=detections;
   }
-  async function infer(source,session,token,generation=state.generation) {
-    if(!activeOperation(token,generation))return false;
-    const zoom=state.zoom,frameStart=performance.now();if(state.processingStarted===null)state.processingStarted=frameStart;const frame=sourceFrame(source),meta=prepare(frame);
+  async function predictFrame(source,session,token,generation,zoom) {
+    if(!activeOperation(token,generation))return null;
+    const frameStart=performance.now();if(state.processingStarted===null)state.processingStarted=frameStart;const frame=sourceFrame(source,zoom),meta=prepare(frame);
     const start=performance.now(),outputs=await runSession(session,{[session.inputNames[0]]:new ort.Tensor('float32',meta.tensor,[1,3,SIZE,SIZE])}),inferenceMs=performance.now()-start;
-    if(!activeOperation(token,generation))return false;
+    if(!activeOperation(token,generation))return null;
+    const output=outputs.output0||outputs[session.outputNames[0]],detections=decode(output,meta);
+    return {frame,detections,zoom,inferenceMs,totalMs:performance.now()-frameStart};
+  }
+  function recordPrediction(prediction) { updateTiming(prediction.inferenceMs,prediction.totalMs); }
+  function predictionFeedback(detail) {
+    const boxes=state.detections,count=boxes.length;
+    const title=count===1?`${NAMES[boxes[0].classId]} · ${(boxes[0].score*100).toFixed(1)}%`:count?`${count} signs found`:'No signs found';
+    const labels=count>1?boxes.map(box=>`${NAMES[box.classId]} ${(box.score*100).toFixed(1)}%`).join(' · ')+'. ':'';
+    resultFeedback(count?'success':'empty',title,labels+detail);
+  }
+  async function infer(source,session,token,generation=state.generation) {
+    const zoom=state.zoom,prediction=await predictFrame(source,session,token,generation,zoom);
+    if(!prediction)return false;
     if(zoom!==state.zoom)return true; // The next live frame uses the new crop; never display the old crop as new zoom.
-    const output=outputs.output0||outputs[session.outputNames[0]],detections=decode(output,meta);draw(frame,detections);updateTiming(inferenceMs,performance.now()-frameStart);
+    draw(prediction.frame,prediction.detections);recordPrediction(prediction);
     return true;
   }
   async function detectImage(image,name,sourceKind='image') {
     stop('');state.image=image;state.sourceName=name;state.sourceKind=sourceKind;resetTiming();error();
-    const token=state.token,generation=state.generation;
+    const token=state.token,generation=state.generation,initialZoom=state.zoom,initialAutoZoom=state.autoZoomApplied;
+    const autoZoom=sourceKind==='image'&&initialZoom===1&&$('detector-auto-zoom').checked;
     showBusy(state.session?'Recognizing image…':'Loading model · about 10 MB',DETECTORS[state.arm].title,token,generation);
     try{
       const session=await getSession();if(!session||!activeOperation(token,generation))return;
       showBusy('Preparing model…',DETECTORS[state.arm].title,token,generation);
       await warmup(session);if(!activeOperation(token,generation))return;
-      showBusy('Recognizing image…',`${state.zoom.toFixed(1)}× centre crop`,token,generation);
-      if(await infer(image,session,token,generation)){hideBusy(token,generation);status(`Detection complete · ${name} · ${state.detections.length} sign${state.detections.length===1?'':'s'} found.`);}
+      showBusy('Recognizing image…',`${initialZoom.toFixed(1)}× centre crop`,token,generation);
+      const initial=await predictFrame(image,session,token,generation,initialZoom);
+      if(!initial||state.zoom!==initialZoom){hideBusy(token,generation);return;}
+      recordPrediction(initial);let chosen=initial;const checked=[initialZoom];
+      if(autoZoom&&!initial.detections.length){
+        for(const zoom of [2,4]){
+          showBusy(`Checking ${zoom}× zoom…`,'No signs found at 1×. Checking the centre of the original photo.',token,generation);
+          const candidate=await predictFrame(image,session,token,generation,zoom);
+          if(!candidate||state.zoom!==initialZoom){hideBusy(token,generation);return;}
+          recordPrediction(candidate);checked.push(zoom);
+          if(candidate.detections.length){chosen=candidate;break;}
+        }
+      }
+      if(!activeOperation(token,generation))return;
+      state.zoom=chosen.zoom;state.autoZoomApplied=chosen.zoom>1&&(checked.length>1||initialAutoZoom);
+      $('detector-zoom').value=String(chosen.zoom);$('detector-zoom-value').textContent=`${chosen.zoom.toFixed(1)}×`;
+      draw(chosen.frame,chosen.detections);hideBusy(token,generation);
+      const zoomNote=checked.length>1?` Auto zoom checked ${checked.map(zoom=>`${zoom}×`).join(', ')}. ${chosen.zoom>1?`Showing the ${chosen.zoom}× centre crop.`:'Showing the full photo.'}`:` Zoom ${chosen.zoom.toFixed(1)}×.`;
+      const emptyNote=chosen.detections.length?'':` No sign exceeded the ${Math.round(Number($('detector-confidence').value)*100)}% confidence threshold. Try a closer or sharper view.`;
+      predictionFeedback(`Detection complete · ${state.detections.length} sign${state.detections.length===1?'':'s'} found.${zoomNote}${emptyNote} File: ${name}`);
     }catch(e){if(!activeOperation(token,generation))return;hideBusy(token,generation);console.error(e);error(e.message||String(e));status('Detection failed. No substitute result is shown.');}
   }
   async function loop(session,token,generation) {
@@ -237,13 +282,14 @@
         if(video.ended){stop(state.sourceKind==='replay'?'Synthetic example replay finished.':'Uploaded video finished. Camera access is released.');break;}
         if(video.readyState>=2&&!video.paused){
           if(!await infer(video,session,token,generation))break;
-          status(`${state.sourceKind==='camera'?'Live camera':state.sourceKind==='replay'?'Synthetic example replay':'Uploaded video'} · ${state.detections.length} sign${state.detections.length===1?'':'s'} in the latest frame.`);
+          predictionFeedback(`${state.sourceKind==='camera'?'Live camera':state.sourceKind==='replay'?'Synthetic example replay':'Uploaded video'} · ${state.detections.length} sign${state.detections.length===1?'':'s'} in the latest frame. Zoom ${state.zoom.toFixed(1)}×.`);
         }
         await new Promise(resolve=>requestAnimationFrame(resolve));
       }
     }catch(e){if(!activeOperation(token,generation))return;console.error(e);stop('Detection stopped after an inference error.');error(e.message||String(e));}
   }
   async function startCamera() {
+    resetAutomaticZoom();
     stop('');error();state.image=null;state.sourceKind='camera';state.sourceName='Live camera';resetTiming();
     const token=state.token,generation=state.generation;
     $('detector-start').disabled=true;$('detector-stop').disabled=false;state.starting=true;
@@ -262,6 +308,7 @@
     }catch(e){if(!activeOperation(token,generation))return;stop('Camera detection could not start.');error(e.message||String(e));}
   }
   async function startReplay() {
+    resetAutomaticZoom();
     stop('');error();state.image=null;state.sourceKind='replay';state.sourceName='Synthetic example replay';resetTiming();
     const token=state.token,generation=state.generation;state.starting=true;$('detector-stop').disabled=false;$('detector-start').disabled=true;
     showBusy(state.session?'Opening replay…':'Loading model · about 10 MB',DETECTORS[state.arm].title,token,generation);
@@ -277,6 +324,7 @@
   }
   async function loadFile(file) {
     if(!file)return;error();
+    resetAutomaticZoom();
     if(file.type.startsWith('image/')){
       stop('');state.image=null;const token=state.token,generation=state.generation;
       showBusy('Opening photo…',file.name,token,generation);
@@ -300,6 +348,7 @@
       const response=await fetch('samples/manifest.json');if(!response.ok)return;const data=await response.json(),rows=data.images||data;
       $('detector-samples').innerHTML=rows.map((row,i)=>`<button class="sample" data-detector-index="${i}" aria-label="Detect signs in synthetic ${escapeText(NAMES[CLASSES.indexOf(row.label)]||row.label)} example"><img src="samples/${escapeText(row.path)}" alt="Synthetic ${escapeText(row.label)} sign scene"><span>${escapeText(NAMES[CLASSES.indexOf(row.label)]||row.label)}</span></button>`).join('');
       $('detector-samples').querySelectorAll('button').forEach(button=>button.addEventListener('click',async()=>{
+        resetAutomaticZoom();
         stop('');state.image=null;const token=state.token,generation=state.generation;
         showBusy('Opening photo…','Synthetic sign example',token,generation);
         const row=rows[Number(button.dataset.detectorIndex)],image=new Image();
@@ -327,11 +376,11 @@
 
       const wrapper=document.createElement('section');wrapper.className='detector-experiment-section';
       wrapper.setAttribute('aria-label','Latest three-arm detector experiment');
-      wrapper.innerHTML='<p class="eyebrow">LATEST DETECTOR STUDY · TESLA T4</p><h2>Three training sets. Original data selected.</h2><p class="result-note">Each detector checkpoint and the default arm were selected by validation mAP@0.50:0.95 before the test set was evaluated.</p>';
+      wrapper.innerHTML='<p class="eyebrow">LATEST DETECTOR STUDY · TESLA T4</p><h2>Three training sets. Original data won validation.</h2><p class="result-note">Each detector checkpoint and the experiment winner were selected by validation mAP@0.50:0.95 before the test set was evaluated. The app defaults to Expanded + synthetic for the demonstration.</p>';
       wrapper.innerHTML+=`<div class="metrics-summary"><span class="metric-pill"><strong>353 / 453 / 581</strong>training images</span><span class="metric-pill"><strong>${escapeText(dataset.validation_images??120)}</strong>shared validation images</span><span class="metric-pill"><strong>${escapeText(dataset.test_images??96)}</strong>shared test images</span><span class="metric-pill"><strong>${escapeText(dataset.added_real_frames??100)} frames / ${escapeText(dataset.added_real_boxes??169)} boxes</strong>added real annotations</span><span class="metric-pill"><strong>${escapeText(dataset.synthetic_composites??128)}</strong>synthetic composites</span></div>`;
-      wrapper.innerHTML+=`<p id="detector-validation-selection" class="selection-result">Default validation winner: ${escapeText(ARM_NAMES[selectedArm]||selectedArm)} · validation mAP@0.50:0.95 ${percent(selectedValidation?.mAP50_95)}. The test set did not choose the default model. The optional detector selector changes inference, not this experiment result.</p>`;
+      wrapper.innerHTML+=`<p id="detector-validation-selection" class="selection-result">Validation winner: ${escapeText(ARM_NAMES[selectedArm]||selectedArm)} · validation mAP@0.50:0.95 ${percent(selectedValidation?.mAP50_95)}. App default: ${escapeText(ARM_NAMES[DEFAULT_DETECTOR])}. The detector selector changes inference, not this experiment result.</p>`;
       wrapper.innerHTML+='<p class="tiny">Clean evaluation on the original 96-image test set. mAP measures class and bounding-box agreement; these values do not change with browser simulations.</p>';
-      wrapper.innerHTML+='<div class="table-wrap"><table id="detector-results-table"><thead><tr><th scope="col">Training arm</th><th scope="col">Train images / boxes</th><th scope="col">Validation mAP@0.50:0.95</th><th scope="col">Test mAP@0.50</th><th scope="col">Test mAP@0.50:0.95</th><th scope="col">Test precision</th><th scope="col">Test recall</th></tr></thead><tbody>'+rows.map(row=>`<tr${row.arm===selectedArm?' class="selected-detector-row"':''} data-arm="${escapeText(row.arm)}"><td>${escapeText(ARM_NAMES[row.arm]||row.model||row.arm)}${row.arm===selectedArm?' <span class="deployed-label">VALIDATION SELECTED · DEFAULT</span>':''}</td><td>${escapeText(row.train_images??'—')} / ${escapeText(row.train_boxes??'—')}</td><td>${percent(row.validation_map50_95)}</td><td>${percent(row.map50)}</td><td>${percent(row.map50_95)}</td><td>${percent(row.precision)}</td><td>${percent(row.recall)}</td></tr>`).join('')+'</tbody></table></div>';
+      wrapper.innerHTML+='<div class="table-wrap"><table id="detector-results-table"><thead><tr><th scope="col">Training arm</th><th scope="col">Train images / boxes</th><th scope="col">Validation mAP@0.50:0.95</th><th scope="col">Test mAP@0.50</th><th scope="col">Test mAP@0.50:0.95</th><th scope="col">Test precision</th><th scope="col">Test recall</th></tr></thead><tbody>'+rows.map(row=>`<tr${row.arm===selectedArm?' class="selected-detector-row"':''} data-arm="${escapeText(row.arm)}"><td>${escapeText(ARM_NAMES[row.arm]||row.model||row.arm)}${row.arm===selectedArm?' <span class="deployed-label">VALIDATION SELECTED</span>':''}${row.arm===DEFAULT_DETECTOR?' <span class="deployed-label">APP DEFAULT</span>':''}</td><td>${escapeText(row.train_images??'—')} / ${escapeText(row.train_boxes??'—')}</td><td>${percent(row.validation_map50_95)}</td><td>${percent(row.map50)}</td><td>${percent(row.map50_95)}</td><td>${percent(row.precision)}</td><td>${percent(row.recall)}</td></tr>`).join('')+'</tbody></table></div>';
       wrapper.innerHTML+=`<p id="detector-stress-results-note" class="study-status-note">${escapeText(data.stress_evaluation?.note||'Stress-condition scores have not been measured for this study.')}</p>`;
       if(data.protocol_description)wrapper.innerHTML+=`<details class="detector-protocol"><summary>Training and evaluation protocol</summary><p class="result-note">${escapeText(data.protocol_description)}</p></details>`;
       const notes=Array.isArray(data.notes)?data.notes:data.notes?[data.notes]:[];
@@ -346,8 +395,9 @@
       console.warn('Recorded detection metrics unavailable',e);
     }
   }
-  $('detector-zoom').addEventListener('input',e=>{state.zoom=Math.max(1,Math.min(4,Number(e.target.value)||1));$('detector-zoom-value').textContent=`${state.zoom.toFixed(1)}×`;resetTiming();});
+  $('detector-zoom').addEventListener('input',e=>{state.autoZoomApplied=false;state.zoom=Math.max(1,Math.min(4,Number(e.target.value)||1));$('detector-zoom-value').textContent=`${state.zoom.toFixed(1)}×`;resetTiming();});
   $('detector-zoom').addEventListener('change',()=>{if(state.image)detectImage(state.image,state.sourceName,state.sourceKind);});
+  $('detector-auto-zoom').addEventListener('change',()=>{if(!$('detector-auto-zoom').checked)state.autoZoomApplied=false;if(state.image&&state.sourceKind==='image')detectImage(state.image,state.sourceName,state.sourceKind);});
   $('detector-model-select').addEventListener('change',e=>{switchDetector(e.target.value).catch(e=>{console.error(e);error(e.message||String(e));});});
   $('detector-start').addEventListener('click',startCamera);$('detector-replay').addEventListener('click',startReplay);$('detector-stop').addEventListener('click',()=>stop());$('detector-upload').addEventListener('click',()=>$('detector-file').click());$('detector-file').addEventListener('change',e=>loadFile(e.target.files[0]));
   $('detector-condition').addEventListener('change',()=>{$('detector-condition-note').textContent=conditionNotes[$('detector-condition').value];if(state.image)detectImage(state.image,state.sourceName,state.sourceKind);else if(state.running)resetTiming();});

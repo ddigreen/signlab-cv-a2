@@ -107,7 +107,7 @@
     "note": "Dark, blur, low-resolution and occlusion scores have not been measured for this detector study. Interactive condition changes are deterministic simulations only."
   },
   "environment": "Tesla T4 GPU \u00b7 Python 3.13.16 \u00b7 PyTorch 2.11.0+cu130 \u00b7 Ultralytics 8.4.190",
-  "protocol_description": "Three YOLO11n arms start from identical official COCO-pretrained weights and use seed 42, 320 px inputs, batch 8, AdamW (lr0=0.001), up to 20 epochs, patience 8 and the first 10 modules frozen. Flips are disabled. The training sets contain 353 original images, 453 real images after adding 100 visually reviewed frames (169 added boxes), and 581 images after adding 128 MaskGen-background composites. Each arm uses the same 120 validation and 96 original test images. Validation mAP50-95 selects each checkpoint and the deployed arm before test evaluation. AP evaluation uses confidence 0.001 and NMS IoU 0.7; browser display uses confidence 0.25 and class-aware NMS IoU 0.45.",
+  "protocol_description": "Three YOLO11n arms start from identical official COCO-pretrained weights and use seed 42, 320 px inputs, batch 8, AdamW (lr0=0.001), up to 20 epochs, patience 8 and the first 10 modules frozen. Flips are disabled. The training sets contain 353 original images, 453 real images after adding 100 visually reviewed frames (169 added boxes), and 581 images after adding 128 MaskGen-background composites. Each arm uses the same 120 validation and 96 original test images. Validation mAP50-95 selects each checkpoint and the experiment winner before test evaluation. The current browser default is a separate user-selected deployment choice. AP evaluation uses confidence 0.001 and NMS IoU 0.7; browser display uses confidence 0.25 and class-aware NMS IoU 0.45.",
   "note": "Clean test only \u00b7 96 original images. Browser simulations do not update these recorded metrics.",
   "notes": [
     "The original-data arm had the highest validation mAP50-95 (0.9051286301) and was selected before test evaluation.",
@@ -117,5 +117,10 @@
     "Each arm uses one training seed. Larger training sets also add optimizer steps; this comparison measures the complete data-addition pipeline.",
     "No new stress-condition scores are available for this detector. Prior detector stress scores are not carried over.",
     "The classifier results below are the original pilot study and do not describe these detector checkpoints. Detector mAP and classifier accuracy measure different tasks."
-  ]
+  ],
+  "deployment": {
+    "default_arm": "expanded_synthetic",
+    "selection_basis": "user_requested_demo_default",
+    "validation_selected_arm": "original"
+  }
 }
