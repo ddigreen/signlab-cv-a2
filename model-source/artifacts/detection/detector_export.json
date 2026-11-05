@@ -1,0 +1,35 @@
+{
+  "selected_arm": "original",
+  "onnx_sha256": "b69fe6b10b1911c4fb056b8473fcc517ed3fe0a16b5828f9aba828a91d088b43",
+  "source_checkpoint_sha256": "1ac45989fedf038504889a252ae66b121f74eb3bb57484e54028c2c563dcc33a",
+  "opset": 17,
+  "input_shape": [
+    1,
+    3,
+    320,
+    320
+  ],
+  "nms_in_graph": false,
+  "preprocess": "RGB letterbox, pad114, scale1/255, NCHW",
+  "inputs": [
+    {
+      "name": "images",
+      "shape": [
+        1,
+        3,
+        320,
+        320
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output0",
+      "shape": [
+        1,
+        8,
+        2100
+      ]
+    }
+  ]
+}

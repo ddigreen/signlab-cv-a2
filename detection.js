@@ -4,6 +4,8 @@
   const NAMES = ['Give way', 'Main road', 'Parking', 'Pedestrian crossing'];
   const COLORS = ['#f7bf5b', '#9bd2ff', '#7de0b7', '#e7a2ff'];
   const SIZE = 320, IOU_THRESHOLD = 0.45;
+  const DETECTOR_REVISION = 't4-three-arm-original-v1';
+  const ARM_NAMES = {original:'Original real data', expanded:'+100 real frames', expanded_synthetic:'+100 real +128 synthetic'};
   const SOURCE_LABELS = {camera: 'CAMERA', replay: 'SYNTHETIC EXAMPLE REPLAY', video: 'LOCAL VIDEO', image: 'LOCAL IMAGE', sample: 'SYNTHETIC SAMPLE'};
   const $ = id => document.getElementById(id);
   const target = $('detector-canvas'), video = $('detector-video');
@@ -40,7 +42,7 @@
     ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = false; ort.env.wasm.wasmPaths = new URL('vendor/', location.href).href;
     state.loading = (async () => {
       status('Loading the trained YOLO11n detector…');
-      const response = await fetch('models/detector.onnx',{cache:'no-cache'});
+      const response = await fetch(`models/detector.onnx?v=${DETECTOR_REVISION}`,{cache:'no-cache'});
       if (!response.ok) throw new Error(`The trained detector is unavailable (${response.status}). Expected web/models/detector.onnx. No detection result has been substituted.`);
       const bytes = await response.arrayBuffer();
       if (bytes.byteLength < 1000) throw new Error('The detector file is incomplete. Restore the exported ONNX model.');
@@ -187,25 +189,47 @@
       }));
     }catch(e){console.warn('Detection samples unavailable',e);}
   }
-  function percent(value){if(value===undefined||value===null||!Number.isFinite(Number(value)))return '—';const n=Number(value);return `${(n<=1?n*100:n).toFixed(1)}%`;}
+  function percent(value){if(value===undefined||value===null||!Number.isFinite(Number(value)))return '—';const n=Number(value);return `${(n<=1?n*100:n).toFixed(2)}%`;}
   async function loadMetrics(){
+    const content=$('detector-results-content');
     try{
-      const response=await fetch('results/detection.json');if(!response.ok)return;const data=await response.json();
-      const rows=data.comparison||data.conditions||[],clean=rows.find(row=>(row.condition||'clean').toLowerCase()==='clean')||rows[0]||{};
-      $('detector-map50').textContent=percent(data.map50??data.mAP50??clean.map50);$('detector-map5095').textContent=percent(data.map50_95??data.map5095??clean.map50_95??clean.map5095);
-      $('detector-metrics-note').textContent=data.note||(Array.isArray(data.notes)?data.notes[0]:data.notes)||'Measured on the held-out detection test set. This is separate from the live camera session.';
+      const response=await fetch(`results/detection.json?v=${DETECTOR_REVISION}`,{cache:'no-cache'});
+      if(!response.ok)throw new Error('The latest detector results are unavailable.');
+      const data=await response.json(),rows=(data.comparison||[]).filter(row=>row.condition==='clean');
       const selectedArm=data.selected_arm||data.selection?.selected_arm;
-      if(selectedArm){$('detector-selected-arm').hidden=false;$('detector-selected-arm').textContent=`Deployed: YOLO11n · ${selectedArm==='maskgen'?'MaskGen augmentation':selectedArm==='real'?'real-only':selectedArm} arm, selected on validation.`;}
-      const realClean=rows.find(row=>row.arm==='real'&&row.condition==='clean'),maskgenClean=rows.find(row=>row.arm==='maskgen'&&row.condition==='clean');
-      if(realClean&&maskgenClean){const realAP=Number(realClean.map50_95??realClean.map5095),maskgenAP=Number(maskgenClean.map50_95??maskgenClean.map5095);if(Number.isFinite(realAP)&&Number.isFinite(maskgenAP)){$('detector-test-outcome').hidden=false;$('detector-test-outcome').textContent=`Clean test mAP@0.50:0.95: MaskGen ${(maskgenAP*100).toFixed(2)}% · real-only ${(realAP*100).toFixed(2)}%. ${maskgenAP<realAP?'Augmentation did not improve test localization.':maskgenAP===realAP?'Both arms scored equally.':'MaskGen scored higher on this test.'}`;}}
+      const selected=rows.find(row=>row.arm===selectedArm);
+      if(!selected||!rows.length)throw new Error('No validation-selected detector metrics are recorded.');
+      const dataset=data.dataset||{},validation=data.selection?.validation_metrics||[];
+      const selectedValidation=validation.find(row=>row.arm===selectedArm);
+      $('detector-map50').textContent=percent(selected.map50);
+      $('detector-map5095').textContent=percent(selected.map50_95);
+      $('detector-metrics-note').textContent=data.note||'Clean test only. Browser simulations do not update these recorded metrics.';
+      $('detector-selected-arm').hidden=false;
+      $('detector-selected-arm').textContent=`Deployed: YOLO11n · ${ARM_NAMES[selectedArm]||selectedArm} arm. Selected on validation${selectedValidation?` (${percent(selectedValidation.mAP50_95)} mAP@0.50:0.95)`:''} before test evaluation.`;
+      $('detector-stress-note').textContent=data.stress_evaluation?.note||'No quantitative stress evaluation is available for this detector. Controls apply deterministic browser simulations.';
+      $('detector-test-outcome').hidden=false;
+      $('detector-test-outcome').textContent=`Clean test mAP@0.50:0.95: ${rows.map(row=>`${ARM_NAMES[row.arm]||row.arm} ${percent(row.map50_95)}`).join(' · ')}. Added training data did not improve this metric over the original-data arm.`;
 
-      const wrapper=document.createElement('div');wrapper.className='detector-experiment-section';
-      wrapper.innerHTML='<p class="eyebrow">LOCALIZATION EXPERIMENTS</p><h2>Detection across conditions</h2><p class="result-note">mAP evaluates both the predicted class and its bounding box against annotated test signs.</p>';
-      if(rows.length){wrapper.innerHTML+='<div class="table-wrap"><table><thead><tr><th>Model</th><th>Condition</th><th>Images</th><th>mAP@0.50</th><th>mAP@0.50:0.95</th><th>Precision</th><th>Recall</th></tr></thead><tbody>'+rows.map(row=>`<tr><td>${escapeText(row.model||'YOLO11n')}${row.arm===selectedArm?' · deployed':''}</td><td>${escapeText(row.condition||'clean')}</td><td>${escapeText(row.n??row.images??'—')}</td><td>${percent(row.map50)}</td><td>${percent(row.map50_95??row.map5095)}</td><td>${percent(row.precision)}</td><td>${percent(row.recall)}</td></tr>`).join('')+'</tbody></table></div>';}
-      const notes=Array.isArray(data.notes)?data.notes:data.notes?[data.notes]:[];wrapper.innerHTML+=notes.map(note=>`<p class="result-note">${escapeText(note)}</p>`).join('');
-      if(data.environment)wrapper.innerHTML+=`<p class="tiny">Detection evaluation environment: ${escapeText(typeof data.environment==='string'?data.environment:JSON.stringify(data.environment))}. Recorded backend timing is not used for an arm-to-arm speed comparison; live browser timing is measured independently.</p>`;
-      $('results-panel').querySelector('.content-card').appendChild(wrapper);
-    }catch(e){console.warn('Recorded detection metrics unavailable',e);}
+      const wrapper=document.createElement('section');wrapper.className='detector-experiment-section';
+      wrapper.setAttribute('aria-label','Latest three-arm detector experiment');
+      wrapper.innerHTML='<p class="eyebrow">LATEST DETECTOR STUDY · TESLA T4</p><h2>Three training sets. Original data selected.</h2><p class="result-note">Each detector checkpoint and the deployed arm were selected by validation mAP@0.50:0.95 before the test set was evaluated.</p>';
+      wrapper.innerHTML+=`<div class="metrics-summary"><span class="metric-pill"><strong>353 / 453 / 581</strong>training images</span><span class="metric-pill"><strong>${escapeText(dataset.validation_images??120)}</strong>shared validation images</span><span class="metric-pill"><strong>${escapeText(dataset.test_images??96)}</strong>shared test images</span><span class="metric-pill"><strong>${escapeText(dataset.added_real_frames??100)} frames / ${escapeText(dataset.added_real_boxes??169)} boxes</strong>added real annotations</span><span class="metric-pill"><strong>${escapeText(dataset.synthetic_composites??128)}</strong>synthetic composites</span></div>`;
+      wrapper.innerHTML+=`<p id="detector-validation-selection" class="selection-result">Deployed: ${escapeText(ARM_NAMES[selectedArm]||selectedArm)} · validation mAP@0.50:0.95 ${percent(selectedValidation?.mAP50_95)}. The test set did not choose the deployed arm.</p>`;
+      wrapper.innerHTML+='<p class="tiny">Clean evaluation on the original 96-image test set. mAP measures class and bounding-box agreement; these values do not change with browser simulations.</p>';
+      wrapper.innerHTML+='<div class="table-wrap"><table id="detector-results-table"><thead><tr><th scope="col">Training arm</th><th scope="col">Train images / boxes</th><th scope="col">Validation mAP@0.50:0.95</th><th scope="col">Test mAP@0.50</th><th scope="col">Test mAP@0.50:0.95</th><th scope="col">Test precision</th><th scope="col">Test recall</th></tr></thead><tbody>'+rows.map(row=>`<tr${row.arm===selectedArm?' class="selected-detector-row"':''} data-arm="${escapeText(row.arm)}"><td>${escapeText(ARM_NAMES[row.arm]||row.model||row.arm)}${row.arm===selectedArm?' <span class="deployed-label">DEPLOYED</span>':''}</td><td>${escapeText(row.train_images??'—')} / ${escapeText(row.train_boxes??'—')}</td><td>${percent(row.validation_map50_95)}</td><td>${percent(row.map50)}</td><td>${percent(row.map50_95)}</td><td>${percent(row.precision)}</td><td>${percent(row.recall)}</td></tr>`).join('')+'</tbody></table></div>';
+      wrapper.innerHTML+=`<p id="detector-stress-results-note" class="study-status-note">${escapeText(data.stress_evaluation?.note||'Stress-condition scores have not been measured for this study.')}</p>`;
+      if(data.protocol_description)wrapper.innerHTML+=`<details class="detector-protocol"><summary>Training and evaluation protocol</summary><p class="result-note">${escapeText(data.protocol_description)}</p></details>`;
+      const notes=Array.isArray(data.notes)?data.notes:data.notes?[data.notes]:[];
+      wrapper.innerHTML+=notes.map(note=>`<p class="result-note">${escapeText(note)}</p>`).join('');
+      if(data.environment)wrapper.innerHTML+=`<p class="tiny">Detector experiment environment: ${escapeText(typeof data.environment==='string'?data.environment:JSON.stringify(data.environment))}. Recorded backend timing is not an arm-to-arm speed comparison; live browser timing is measured independently.</p>`;
+      content.replaceChildren(wrapper);
+    }catch(e){
+      $('detector-map50').textContent='—';$('detector-map5095').textContent='—';
+      $('detector-selected-arm').hidden=true;$('detector-test-outcome').hidden=true;
+      $('detector-metrics-note').textContent='Latest recorded detector metrics are unavailable.';
+      content.innerHTML='<p class="empty-message">The latest detector study could not be loaded. Recorded scores are unavailable; browser inference still uses the bundled model.</p>';
+      console.warn('Recorded detection metrics unavailable',e);
+    }
   }
   $('detector-start').addEventListener('click',startCamera);$('detector-replay').addEventListener('click',startReplay);$('detector-stop').addEventListener('click',()=>stop());$('detector-upload').addEventListener('click',()=>$('detector-file').click());$('detector-file').addEventListener('change',e=>loadFile(e.target.files[0]));
   $('detector-condition').addEventListener('change',()=>{$('detector-condition-note').textContent=conditionNotes[$('detector-condition').value];if(state.image)detectImage(state.image,state.sourceName,state.sourceKind);else if(state.running)resetTiming();});

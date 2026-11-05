@@ -1,0 +1,50 @@
+{
+  "dataset_archive_sha256": "d92542e7a18c60cceb7547acf9b433e489127a260a30d1578cc5a1344bccd724",
+  "architecture": "YOLO11n",
+  "pretrained_sha256": "0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1",
+  "ultralytics_version": "8.4.190",
+  "torch_version": "2.11.0+cu130",
+  "torchvision_version": "0.26.0+cu130",
+  "arms": [
+    "original",
+    "expanded",
+    "expanded_synthetic"
+  ],
+  "classes": [
+    "give_way",
+    "main_road",
+    "parking",
+    "pedestrian_crossing"
+  ],
+  "training_settings": {
+    "epochs": 20,
+    "imgsz": 320,
+    "batch": 8,
+    "workers": 0,
+    "seed": 42,
+    "deterministic": true,
+    "freeze": 10,
+    "optimizer": "AdamW",
+    "lr0": 0.001,
+    "lrf": 0.1,
+    "weight_decay": 0.0005,
+    "patience": 8,
+    "fliplr": 0.0,
+    "flipud": 0.0,
+    "degrees": 10.0,
+    "hsv_h": 0.01,
+    "hsv_s": 0.3,
+    "hsv_v": 0.3,
+    "mosaic": 0.5,
+    "close_mosaic": 5,
+    "mixup": 0.0,
+    "copy_paste": 0.0,
+    "amp": false,
+    "cache": false,
+    "plots": true,
+    "save": true,
+    "verbose": true
+  },
+  "validation_selection": "highest mAP50-95 on validation; arm order breaks ties",
+  "test_used_for_selection": false
+}

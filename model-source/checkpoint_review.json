@@ -1,8 +1,8 @@
 {
-  "checkpoint": "artifacts/detection/maskgen/weights/best.pt",
-  "selected_arm": "maskgen",
-  "original_sha256": "9cfc00f948accbd080cd8d326e2909e55fadc845ac32797f333592d7f1fdf7a1",
-  "sanitized_sha256": "dbe578c5d2350ef7c4bf27b2b7f5a8689b9a79ac58ab01a9df0b733a9930afa5",
+  "checkpoint": "artifacts/detection/original/weights/best.pt",
+  "selected_arm": "original",
+  "original_sha256": "1ac45989fedf038504889a252ae66b121f74eb3bb57484e54028c2c563dcc33a",
+  "sanitized_sha256": "4c73ab0a70a2e57a09d3fc3490258643875cc6c38757ecd709b78fcc7a5ab9f8",
   "metadata_fields_rewritten": [
     "model.args.model",
     "model.args.data",
@@ -11,31 +11,70 @@
     "train_args.model",
     "train_args.data",
     "train_args.project",
+    "training_args.model",
+    "training_args.data",
+    "training_args.project",
+    "training_args.save_dir",
     "model.pt_path",
     "git"
   ],
   "tensor_count": 499,
   "all_tensor_values_and_dtypes_equal": true,
+  "deployed_onnx_sha256": "b69fe6b10b1911c4fb056b8473fcc517ed3fe0a16b5828f9aba828a91d088b43",
+  "source_results_archive_sha256": "15e1aecbf80e63d8f9b66988b418e7d6c620ca374b9052a31a49647f6f7dc047",
   "export_verification": {
     "commands": [
-      "python src/train_detector.py export",
-      "python src/run_experiments.py export"
+      "python src/train_expanded_detector.py export --output /path/to/export-check/detector.onnx"
     ],
     "private_training_inputs_used": false,
-    "synthetic_classifier_example": "examples/give_way.jpg",
-    "graphs": {
-      "detector.onnx": {
-        "serialized_graph_equal_to_staged_app": true,
-        "graph_sha256": "da1622f12e77ca5e70e31d604c2599ffc8d706cde07233ac68109878feb56793"
-      },
-      "baseline.onnx": {
-        "serialized_graph_equal_to_staged_app": true,
-        "graph_sha256": "13cdc272e4cc39cc23ece39fbee506a1fd06b36e8018be9321b3b3bc47c5871a"
-      },
-      "enhanced.onnx": {
-        "serialized_graph_equal_to_staged_app": true,
-        "graph_sha256": "13cdc272e4cc39cc23ece39fbee506a1fd06b36e8018be9321b3b3bc47c5871a"
-      }
+    "reexported_initializer_arrays_equal": true,
+    "initializer_count": 175,
+    "node_op_types_and_order_equal": true,
+    "node_count": 355,
+    "serialized_bytes_equal": false,
+    "note": "The CPU re-export uses a different PyTorch version than the Colab export. The deployed ONNX is the original completed-run export.",
+    "deployed_pytorch_onnx_numerical_check": {
+      "pytorch_onnx_agreement": true,
+      "atol": 0.003,
+      "rtol": 0.0001,
+      "public_synthetic_samples": [
+        {
+          "sample": "give_way.jpg",
+          "output_shape": [
+            1,
+            8,
+            2100
+          ],
+          "max_abs_difference": 0.00034332275390625
+        },
+        {
+          "sample": "main_road.jpg",
+          "output_shape": [
+            1,
+            8,
+            2100
+          ],
+          "max_abs_difference": 0.00054168701171875
+        },
+        {
+          "sample": "parking.jpg",
+          "output_shape": [
+            1,
+            8,
+            2100
+          ],
+          "max_abs_difference": 0.0003204345703125
+        },
+        {
+          "sample": "pedestrian_crossing.jpg",
+          "output_shape": [
+            1,
+            8,
+            2100
+          ],
+          "max_abs_difference": 0.0003662109375
+        }
+      ]
     }
   }
 }

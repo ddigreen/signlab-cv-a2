@@ -1,7 +1,7 @@
 task: detect
 mode: train
 model: artifacts/pretrained/yolo11n.pt
-data: data/detection/runtime_maskgen.yaml
+data: data/private/runtime/original.yaml
 epochs: 20
 time: null
 patience: 8
@@ -10,10 +10,10 @@ imgsz: 320
 save: true
 save_period: -1
 cache: false
-device: mps
+device: '0'
 workers: 0
 project: artifacts/detection
-name: maskgen
+name: original
 exist_ok: true
 pretrained: true
 cls_remap: true
@@ -111,4 +111,4 @@ auto_augment: randaugment
 erasing: 0.4
 cfg: null
 tracker: tracktrack.yaml
-save_dir: artifacts/detection/maskgen
+save_dir: artifacts/detection/original

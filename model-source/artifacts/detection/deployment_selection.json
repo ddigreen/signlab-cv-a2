@@ -1,9 +1,48 @@
 {
-  "selected_arm": "maskgen",
-  "criterion": "highest best validation mAP50-95 across the two arms; real-only tie break",
-  "validation_fitness": {
-    "real": 0.88844,
-    "maskgen": 0.90802
-  },
-  "test_used": false
+  "selected_arm": "original",
+  "criterion": "highest validation mAP50-95",
+  "tie_break_order": [
+    "original",
+    "expanded",
+    "expanded_synthetic"
+  ],
+  "test_used_for_selection": false,
+  "dataset_archive_sha256": "d92542e7a18c60cceb7547acf9b433e489127a260a30d1578cc5a1344bccd724",
+  "validation_metrics": [
+    {
+      "arm": "original",
+      "split": "val",
+      "images": 120,
+      "mAP50": 0.9917083724937343,
+      "mAP50_95": 0.9051286301065705,
+      "precision": 0.7781149245914344,
+      "recall": 0.9206171910371285,
+      "model_inference_ms_per_image": 2.351622616667252
+    },
+    {
+      "arm": "expanded",
+      "split": "val",
+      "images": 120,
+      "mAP50": 0.995,
+      "mAP50_95": 0.8930986842297468,
+      "precision": 0.9899606023731052,
+      "recall": 1.0,
+      "model_inference_ms_per_image": 2.0118309499972993
+    },
+    {
+      "arm": "expanded_synthetic",
+      "split": "val",
+      "images": 120,
+      "mAP50": 0.995,
+      "mAP50_95": 0.9026072927295754,
+      "precision": 0.9967869890618614,
+      "recall": 1.0,
+      "model_inference_ms_per_image": 2.0150945416655
+    }
+  ],
+  "best_checkpoint_sha256": {
+    "original": "1ac45989fedf038504889a252ae66b121f74eb3bb57484e54028c2c563dcc33a",
+    "expanded": "9721cc37d16d806d6cd85d4d1b9caa1695bb5c865ec615e1d3684f4c5fac5241",
+    "expanded_synthetic": "39adcf56e323c70d990e906e76b5bdc19d28dec216fa16919b7fa2e73ee41b8e"
+  }
 }

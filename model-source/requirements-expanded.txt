@@ -1,0 +1,15 @@
+# Measured Linux x86_64 / Tesla T4 training environment, Python 3.13.16.
+# Official CUDA 13.0 wheels are required for the recorded PyTorch pair.
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch==2.11.0+cu130
+torchvision==0.26.0+cu130
+ultralytics==8.4.190
+onnx==1.23.2
+numpy==2.4.6
+pandas==2.2.3
+matplotlib==3.10.0
+Pillow==11.3.0
+PyYAML==6.0.3
+opencv-python==5.0.0.93
+scipy==1.16.3
+tqdm==4.67.3
