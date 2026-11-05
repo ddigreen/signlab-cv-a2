@@ -1,0 +1,20 @@
+# Exact direct model packages used for the completed background-generation run.
+# Install in a separate environment when reproducing the generator; app/other
+# experiments use requirements.txt. Install matching CUDA PyTorch wheels first
+# on Linux if needed. Python3.12 was used. All downloaded weights are cached
+# outside deliverables by --cache-dir; code/model revisions are pinned in script.
+torch==2.14.1
+torchvision==0.29.1
+open_clip_torch==3.3.0
+diffusers==0.35.2
+safetensors==0.8.0
+omegaconf
+einops
+accelerate
+timm
+huggingface-hub
+scipy
+requests
+importlib_metadata
+Pillow
+numpy

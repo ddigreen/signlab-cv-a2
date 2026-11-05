@@ -1,0 +1,41 @@
+{
+  "checkpoint": "artifacts/detection/maskgen/weights/best.pt",
+  "selected_arm": "maskgen",
+  "original_sha256": "9cfc00f948accbd080cd8d326e2909e55fadc845ac32797f333592d7f1fdf7a1",
+  "sanitized_sha256": "dbe578c5d2350ef7c4bf27b2b7f5a8689b9a79ac58ab01a9df0b733a9930afa5",
+  "metadata_fields_rewritten": [
+    "model.args.model",
+    "model.args.data",
+    "model.args.project",
+    "model.args.save_dir",
+    "train_args.model",
+    "train_args.data",
+    "train_args.project",
+    "model.pt_path",
+    "git"
+  ],
+  "tensor_count": 499,
+  "all_tensor_values_and_dtypes_equal": true,
+  "export_verification": {
+    "commands": [
+      "python src/train_detector.py export",
+      "python src/run_experiments.py export"
+    ],
+    "private_training_inputs_used": false,
+    "synthetic_classifier_example": "examples/give_way.jpg",
+    "graphs": {
+      "detector.onnx": {
+        "serialized_graph_equal_to_staged_app": true,
+        "graph_sha256": "da1622f12e77ca5e70e31d604c2599ffc8d706cde07233ac68109878feb56793"
+      },
+      "baseline.onnx": {
+        "serialized_graph_equal_to_staged_app": true,
+        "graph_sha256": "13cdc272e4cc39cc23ece39fbee506a1fd06b36e8018be9321b3b3bc47c5871a"
+      },
+      "enhanced.onnx": {
+        "serialized_graph_equal_to_staged_app": true,
+        "graph_sha256": "13cdc272e4cc39cc23ece39fbee506a1fd06b36e8018be9321b3b3bc47c5871a"
+      }
+    }
+  }
+}

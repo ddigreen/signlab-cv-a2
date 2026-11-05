@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/bytedance/1d-tokenizer",
+  "commit": "942a96fbdd873780179d1b78d5462911528bf8c8",
+  "license": "Apache-2.0",
+  "license_file": "1d-tokenizer/LICENSE",
+  "purpose": "Official pretrained TA-TiTok and MaskGen-VQ inference implementation",
+  "source_changes": "None. Generation script supplies cached exact CLIP embeddings to reduce peak memory.",
+  "paper": "https://arxiv.org/abs/2501.07730",
+  "project": "https://tacju.github.io/projects/maskgen.html",
+  "adapter_notes": "FP16 MPS inference; model residency separated into processes; exact CLIP text outputs cached. Direct EOT pooling adapts OpenCLIP3.x return-API change without changing pooling math. Independent CPU comparison against upstream formulas has zero difference."
+}

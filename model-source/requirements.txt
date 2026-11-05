@@ -1,0 +1,29 @@
+# Direct dependencies. The measured environment is recorded in artifacts/a2/environment.json.
+# A requirements-lock.txt, when supplied, captures the installed experiment versions.
+# For CUDA, install the matching official PyTorch/torchvision wheel pair first.
+torch
+torchvision
+numpy
+Pillow
+scikit-learn
+pandas
+matplotlib
+onnx
+onnxruntime
+ultralytics
+PyYAML
+omegaconf
+transformers
+diffusers
+timm
+open_clip_torch
+einops
+scipy
+accelerate
+safetensors
+huggingface-hub
+tqdm
+reportlab
+pypdf
+imageio-ffmpeg
+

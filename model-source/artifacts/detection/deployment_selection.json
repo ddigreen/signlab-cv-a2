@@ -1,0 +1,9 @@
+{
+  "selected_arm": "maskgen",
+  "criterion": "highest best validation mAP50-95 across the two arms; real-only tie break",
+  "validation_fitness": {
+    "real": 0.88844,
+    "maskgen": 0.90802
+  },
+  "test_used": false
+}

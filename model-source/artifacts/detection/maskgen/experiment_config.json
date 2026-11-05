@@ -1,0 +1,18 @@
+{
+  "architecture": "YOLO11n",
+  "pretrained_sha256": "0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1",
+  "arm": "maskgen",
+  "seed": 42,
+  "imgsz": 320,
+  "epochs_max": 20,
+  "batch": 8,
+  "freeze_first_modules": 10,
+  "optimizer": "AdamW",
+  "lr0": 0.001,
+  "selection": "Ultralytics validation fitness (mAP50-95)",
+  "best_validation_fitness": 0.90802,
+  "test_used_for_selection": false,
+  "annotation_scope": "dominant target sign per image",
+  "device": "mps",
+  "determinism_limit": "MPS scatter_reduce and index_put accumulation warn of nondeterministic implementations despite fixed seeds."
+}
