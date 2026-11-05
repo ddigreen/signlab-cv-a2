@@ -1,0 +1,115 @@
+{
+  "map50": 0.995,
+  "map50_95": 0.8666064350392475,
+  "selected_arm": "maskgen",
+  "selection": {
+    "selected_arm": "maskgen",
+    "criterion": "highest best validation mAP50-95 across the two arms; real-only tie break",
+    "validation_fitness": {
+      "real": 0.88844,
+      "maskgen": 0.90802
+    },
+    "test_used": false
+  },
+  "comparison": [
+    {
+      "arm": "real",
+      "model": "YOLO11n real",
+      "condition": "clean",
+      "n": 96,
+      "map50": 0.995,
+      "map50_95": 0.8828546225193656,
+      "precision": 0.9886717597808939,
+      "recall": 1.0,
+      "mean_ms": 6.930588561469146
+    },
+    {
+      "arm": "maskgen",
+      "model": "YOLO11n maskgen",
+      "condition": "clean",
+      "n": 96,
+      "map50": 0.995,
+      "map50_95": 0.8666064350392475,
+      "precision": 0.9837403797707921,
+      "recall": 0.997990326645531,
+      "mean_ms": 1.201946615765337
+    },
+    {
+      "arm": "real",
+      "model": "YOLO11n real",
+      "condition": "dark",
+      "n": 96,
+      "map50": 0.995,
+      "map50_95": 0.8903664729727616,
+      "precision": 0.9885914790822833,
+      "recall": 1.0,
+      "mean_ms": 1.212594175740378
+    },
+    {
+      "arm": "maskgen",
+      "model": "YOLO11n maskgen",
+      "condition": "dark",
+      "n": 96,
+      "map50": 0.995,
+      "map50_95": 0.8736101642670914,
+      "precision": 0.9931649248541596,
+      "recall": 0.9926745461552261,
+      "mean_ms": 1.225638909090776
+    },
+    {
+      "arm": "real",
+      "model": "YOLO11n real",
+      "condition": "blur",
+      "n": 96,
+      "map50": 0.995,
+      "map50_95": 0.8177975834935995,
+      "precision": 0.994871813467283,
+      "recall": 1.0,
+      "mean_ms": 1.2149722278991248
+    },
+    {
+      "arm": "maskgen",
+      "model": "YOLO11n maskgen",
+      "condition": "blur",
+      "n": 96,
+      "map50": 0.995,
+      "map50_95": 0.8119089487526244,
+      "precision": 0.9833943563841553,
+      "recall": 1.0,
+      "mean_ms": 1.187473531899741
+    },
+    {
+      "arm": "real",
+      "model": "YOLO11n real",
+      "condition": "low_resolution",
+      "n": 96,
+      "map50": 0.7863437829062828,
+      "map50_95": 0.5170112004191005,
+      "precision": 0.7309636283954977,
+      "recall": 0.7099223327977564,
+      "mean_ms": 1.2338033860335902
+    },
+    {
+      "arm": "maskgen",
+      "model": "YOLO11n maskgen",
+      "condition": "low_resolution",
+      "n": 96,
+      "map50": 0.7212866138548268,
+      "map50_95": 0.4797504646239689,
+      "precision": 0.813048103307203,
+      "recall": 0.5545929641579792,
+      "mean_ms": 1.2234357794416912
+    }
+  ],
+  "environment": "mps",
+  "protocol_description": "Two YOLO11n models start from the same official COCO-pretrained weights: real-only and real plus 128 MaskGen-background composites. Each uses seed 42, 320 px inputs, batch 8, AdamW (lr0=0.001), 20 maximum epochs, 8-epoch patience and the first 10 modules frozen. Horizontal/vertical flips are disabled. Validation fitness selects the checkpoint; the 96-image test is evaluated after training. AP uses confidence threshold 0.001 and NMS IoU 0.7; the deployed display threshold is 0.25 and NMS IoU is 0.45 differ intentionally.",
+  "notes": [
+    "Dominant target-sign boxes; not exhaustive dense street-scene annotation.",
+    "Codex visual overlay review; no independent human annotation audit.",
+    "Same 96 original test images for all conditions; inherited source dependence remains.",
+    "Synthetic composite boxes are exact visible alpha bounds; real boxes have annotation uncertainty.",
+    "Detector comparison tests the entire augmentation pipeline: 128 extra images, copy-paste, and extra optimizer steps are confounded with generated backgrounds.",
+    "Detector mAP and classifier accuracy measure different tasks.",
+    "One detector training seed per arm; no estimate of detector seed variation."
+  ]
+}

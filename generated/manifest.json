@@ -1,0 +1,113 @@
+{
+  "description": "Eight actual MaskGen-generated backgrounds and four TRAIN-only class-preserving composites. These are synthetic media, not additional real street observations.",
+  "images": [
+    {
+      "path": "backgrounds/maskgen_night_seed4200.png",
+      "label": "night background",
+      "prompt": "A realistic photograph of an empty residential street at night, warm street lamps, apartment buildings, dark blue sky, realistic asphalt road, no people, no vehicles, no signs, no writing.",
+      "seed": 4200,
+      "accepted": true,
+      "generator": "MaskGen-VQ-L + TA-TiTok128",
+      "kind": "AI-generated background"
+    },
+    {
+      "path": "backgrounds/maskgen_rain_seed4201.png",
+      "label": "rain background",
+      "prompt": "A realistic photograph of an empty residential street in heavy rain at night, wet reflective asphalt, apartment buildings and street lamps, no people, no vehicles, no signs, no writing.",
+      "seed": 4201,
+      "accepted": true,
+      "generator": "MaskGen-VQ-L + TA-TiTok128",
+      "kind": "AI-generated background"
+    },
+    {
+      "path": "backgrounds/maskgen_dawn_seed4202.png",
+      "label": "dawn background",
+      "prompt": "A realistic photograph of an empty residential street at dawn, pale sunrise, quiet apartment buildings, realistic asphalt road, no people, no vehicles, no signs, no writing.",
+      "seed": 4202,
+      "accepted": true,
+      "generator": "MaskGen-VQ-L + TA-TiTok128",
+      "kind": "AI-generated background"
+    },
+    {
+      "path": "backgrounds/maskgen_daylight_seed4203.png",
+      "label": "daylight background",
+      "prompt": "A realistic photograph of an empty residential street in bright daylight, apartment buildings, green trees, realistic asphalt road, no people, no vehicles, no signs, no writing.",
+      "seed": 4203,
+      "accepted": true,
+      "generator": "MaskGen-VQ-L + TA-TiTok128",
+      "kind": "AI-generated background"
+    },
+    {
+      "path": "backgrounds/maskgen_overcast_seed4204.png",
+      "label": "overcast background",
+      "prompt": "A realistic photograph of an empty residential street under an overcast grey sky, apartment buildings, soft flat lighting, asphalt road, no people, no vehicles, no signs, no writing.",
+      "seed": 4204,
+      "accepted": true,
+      "generator": "MaskGen-VQ-L + TA-TiTok128",
+      "kind": "AI-generated background"
+    },
+    {
+      "path": "backgrounds/maskgen_fog_seed4205.png",
+      "label": "fog background",
+      "prompt": "A realistic photograph of an empty residential street in dense morning fog, apartment buildings fading into mist, asphalt road, no people, no vehicles, no signs, no writing.",
+      "seed": 4205,
+      "accepted": true,
+      "generator": "MaskGen-VQ-L + TA-TiTok128",
+      "kind": "AI-generated background"
+    },
+    {
+      "path": "backgrounds/maskgen_dusk_seed4206.png",
+      "label": "dusk background",
+      "prompt": "A realistic photograph of an empty residential street at dusk, purple orange sky, apartment buildings and glowing street lamps, asphalt road, no people, no vehicles, no signs, no writing.",
+      "seed": 4206,
+      "accepted": true,
+      "generator": "MaskGen-VQ-L + TA-TiTok128",
+      "kind": "AI-generated background"
+    },
+    {
+      "path": "backgrounds/maskgen_motion_seed4207.png",
+      "label": "motion background",
+      "prompt": "A realistic photograph of an empty residential street seen from a moving camera, slight horizontal motion blur, apartment buildings, asphalt road, no people, no vehicles, no signs, no writing.",
+      "seed": 4207,
+      "accepted": true,
+      "generator": "MaskGen-VQ-L + TA-TiTok128",
+      "kind": "AI-generated background"
+    },
+    {
+      "path": "composites/give_way.jpg",
+      "label": "give_way hybrid composite",
+      "prompt": "Real TRAIN sign cutout + actual MaskGen background; small deterministic occlusion. No validation/test source cutouts.",
+      "seed": 42103,
+      "accepted": true,
+      "generator": "MaskGen background + copy-paste",
+      "kind": "Hybrid synthetic training image"
+    },
+    {
+      "path": "composites/main_road.jpg",
+      "label": "main_road hybrid composite",
+      "prompt": "Real TRAIN sign cutout + actual MaskGen background; small deterministic occlusion. No validation/test source cutouts.",
+      "seed": 42103,
+      "accepted": true,
+      "generator": "MaskGen background + copy-paste",
+      "kind": "Hybrid synthetic training image"
+    },
+    {
+      "path": "composites/parking.jpg",
+      "label": "parking hybrid composite",
+      "prompt": "Real TRAIN sign cutout + actual MaskGen background; small deterministic occlusion. No validation/test source cutouts.",
+      "seed": 42103,
+      "accepted": true,
+      "generator": "MaskGen background + copy-paste",
+      "kind": "Hybrid synthetic training image"
+    },
+    {
+      "path": "composites/pedestrian_crossing.jpg",
+      "label": "pedestrian_crossing hybrid composite",
+      "prompt": "Real TRAIN sign cutout + actual MaskGen background; small deterministic occlusion. No validation/test source cutouts.",
+      "seed": 42103,
+      "accepted": true,
+      "generator": "MaskGen background + copy-paste",
+      "kind": "Hybrid synthetic training image"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "images": [
+    {
+      "path": "give_way.jpg",
+      "label": "give_way",
+      "title": "Synthetic give way example",
+      "kind": "Hybrid synthetic composite"
+    },
+    {
+      "path": "main_road.jpg",
+      "label": "main_road",
+      "title": "Synthetic main road example",
+      "kind": "Hybrid synthetic composite"
+    },
+    {
+      "path": "parking.jpg",
+      "label": "parking",
+      "title": "Synthetic parking example",
+      "kind": "Hybrid synthetic composite"
+    },
+    {
+      "path": "pedestrian_crossing.jpg",
+      "label": "pedestrian_crossing",
+      "title": "Synthetic pedestrian crossing example",
+      "kind": "Hybrid synthetic composite"
+    }
+  ]
+}
