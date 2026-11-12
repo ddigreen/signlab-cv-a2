@@ -1,0 +1,37 @@
+{
+  "arm": "video_refresh",
+  "validation_selected_arm": "expanded_synthetic",
+  "is_validation_selected": false,
+  "onnx_sha256": "a0af8721e51a8e769bbafd7316c3e77bc02b495ac9935bf2785654a0d5f21079",
+  "source_checkpoint_sha256": "c9441b178667b63c21acdf22bc5dc3676f2b1d9c23cac4f7fed598ba3f48772d",
+  "opset": 17,
+  "input_shape": [
+    1,
+    3,
+    320,
+    320
+  ],
+  "nms_in_graph": false,
+  "preprocess": "RGB letterbox, pad114, scale1/255, NCHW",
+  "inputs": [
+    {
+      "name": "images",
+      "shape": [
+        1,
+        3,
+        320,
+        320
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output0",
+      "shape": [
+        1,
+        8,
+        2100
+      ]
+    }
+  ]
+}

@@ -122,5 +122,141 @@
     "default_arm": "expanded_synthetic",
     "selection_basis": "user_requested_demo_default",
     "validation_selected_arm": "original"
+  },
+  "video_refresh": {
+    "selected_arm": "expanded_synthetic",
+    "criterion": "Uniform validation mAP@0.50:0.95",
+    "validation_metrics": [
+      {
+        "arm": "expanded_synthetic",
+        "split": "val",
+        "mAP50": 0.995,
+        "mAP50_95": 0.9039656121891518,
+        "precision": 0.9967857521156769,
+        "recall": 1.0,
+        "per_class_mAP50_95": [
+          0.9034666666666666,
+          0.9862500000000001,
+          0.8289943270338007,
+          0.8971514550561406
+        ],
+        "inference_ms_per_image": 11.23321809185048
+      },
+      {
+        "arm": "video_refresh",
+        "split": "val",
+        "mAP50": 0.995,
+        "mAP50_95": 0.8988001376032486,
+        "precision": 0.9952376255425748,
+        "recall": 1.0,
+        "per_class_mAP50_95": [
+          0.9087855176767675,
+          0.9651785714285713,
+          0.8320659366262815,
+          0.8891705246813741
+        ],
+        "inference_ms_per_image": 10.951126724830829
+      }
+    ],
+    "test_used_for_selection": false,
+    "sha256_by_arm": {
+      "expanded_synthetic": "39adcf56e323c70d990e906e76b5bdc19d28dec216fa16919b7fa2e73ee41b8e",
+      "video_refresh": "ac300ae8ba1fadaa9ab589f9c92a9b02e404935a42a9388fa5cf2842e3ca29e6"
+    },
+    "test_metrics": [
+      {
+        "arm": "expanded_synthetic",
+        "split": "test",
+        "mAP50": 0.995,
+        "mAP50_95": 0.8467134673261512,
+        "precision": 0.9920546092368288,
+        "recall": 1.0,
+        "per_class_mAP50_95": [
+          0.8552067307692308,
+          0.9201208791208793,
+          0.7728363636363637,
+          0.838689895778131
+        ],
+        "inference_ms_per_image": 10.810039938102515
+      },
+      {
+        "arm": "video_refresh",
+        "split": "test",
+        "mAP50": 0.995,
+        "mAP50_95": 0.8751675886017797,
+        "precision": 0.9912738211041756,
+        "recall": 1.0,
+        "per_class_mAP50_95": [
+          0.8599635854341738,
+          0.9314035714285713,
+          0.8284585561497326,
+          0.8808446413946415
+        ],
+        "inference_ms_per_image": 10.940321186960015
+      }
+    ],
+    "config": {
+      "epochs": 4,
+      "imgsz": 320,
+      "batch": 8,
+      "workers": 0,
+      "optimizer": "AdamW",
+      "lr0": 0.0004,
+      "lrf": 0.3,
+      "warmup_epochs": 0.0,
+      "freeze": 10,
+      "fliplr": 0.0,
+      "flipud": 0.0,
+      "degrees": 5.0,
+      "translate": 0.08,
+      "scale": 0.25,
+      "hsv_h": 0.005,
+      "hsv_s": 0.2,
+      "hsv_v": 0.18,
+      "mosaic": 0.0,
+      "mixup": 0.0,
+      "close_mosaic": 0,
+      "seed": 42,
+      "deterministic": false,
+      "amp": false,
+      "patience": 0,
+      "plots": false,
+      "cache": false,
+      "val": true,
+      "save": true
+    },
+    "training_seconds": 106.98,
+    "training_device": "mps",
+    "evaluation_device": "cpu",
+    "torch": "2.14.1",
+    "ultralytics": "8.4.190",
+    "python": "3.12.14",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "validation_images": 120,
+    "test_images": 96,
+    "dataset": {
+      "videos_reviewed": 16,
+      "videos_contributing": 15,
+      "dense_candidates": 414,
+      "new_real_frames": 126,
+      "new_boxes": 134,
+      "boxes_by_class": {
+        "parking": 13,
+        "pedestrian_crossing": 62,
+        "give_way": 35,
+        "main_road": 24
+      },
+      "total_real": 795,
+      "total_images": 923,
+      "train_real": 579,
+      "train_synthetic": 128,
+      "train_images": 707,
+      "validation_images": 120,
+      "test_images": 96,
+      "all_new_frames_train_only": true,
+      "evaluation_membership": "Byte-identical original validation and test lists from the prior package.",
+      "dataset_archive_sha256": "e08d0d1d95689529c8c62dfcccd0fdf23f5454be1fc44d7b4b2221362382c308"
+    },
+    "onnx_sha256": "a0af8721e51a8e769bbafd7316c3e77bc02b495ac9935bf2785654a0d5f21079"
   }
 }

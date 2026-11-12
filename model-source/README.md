@@ -52,7 +52,36 @@ Each arm uses seed 42, batch size 8, AdamW learning rate 0.001, freeze 10, disab
 
 Validation selected `original` with mAP50–95 0.9051286. Test mAP50–95 was 0.8622392 for original, 0.8441348 for expanded and 0.8469105 for expanded plus synthetic. All three test mAP50 values were 0.995. The additions did not improve this inherited test score. Every new frame is training data. Repeated physical signs, source overlap and partial original annotations limit generalization. The synthetic comparison also changes sample count, compositing and optimizer steps. [Recorded experiment](configs/expanded-experiment.json), [validation selection](artifacts/detection/deployment_selection.json).
 
-The browser selector defaults to Expanded + synthetic by user request. Original is available through the selector or `?detector=original`. Each choice displays its own metrics while the recorded validation decision remains Original. The exporter still defaults to the validation-selected Original arm; export the browser default explicitly with `--arm expanded_synthetic`. Predictions on the 100 added training frames do not estimate independent performance on those locations.
+Original remains selectable at `?detector=original`. The three-arm exporter defaults to this study's validation winner; export Expanded + synthetic explicitly with `--arm expanded_synthetic`. Predictions on the added training frames do not estimate independent performance on those locations.
+
+## Reproduce the November video refresh
+
+Extract the updated private training ZIP outside this repository. Train from the included Expanded + synthetic checkpoint, using a fresh private run directory. This follow-up used Python 3.12, PyTorch 2.14.1 and Ultralytics 8.4.190 on an Apple M1 (MPS for training, CPU for the paired evaluation).
+
+```sh
+python src/train_video_refresh.py \
+  --data-root /path/to/private/video-refresh-data \
+  --checkpoint artifacts/detection/expanded_synthetic/weights/best.pt \
+  --output /path/to/private/video-refresh-run --epochs 4 --device mps
+```
+
+The script records validation selection before testing on the preserved 96-image test set. The browser keeps Expanded + synthetic as its default, and offers Video refresh at `?detector=video_refresh`. The portable fine-tuned weights are under [artifacts/detection/video_refresh](artifacts/detection/video_refresh), and the aggregate results are in [results/detection.json](../results/detection.json). To re-export the video refresh checkpoint from this directory:
+
+```sh
+PYTHONPATH=src python - <<'PY'
+import json
+from train_expanded_detector import export_checkpoint
+with open("../results/detection.json") as f:
+    refresh = json.load(f)["video_refresh"]
+export_checkpoint(
+    "artifacts/detection/video_refresh/weights/best.pt",
+    "../models/detector-video-refresh.onnx",
+    {"selected_arm": refresh["selected_arm"],
+     "dataset_archive_sha256": refresh["dataset"]["dataset_archive_sha256"]},
+    arm="video_refresh",
+)
+PY
+```
 
 ## Historical classifiers and generation
 

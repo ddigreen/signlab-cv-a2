@@ -1,0 +1,8 @@
+{
+  "arm": "video_refresh",
+  "checkpoint": "artifacts/detection/video_refresh/weights/best.pt",
+  "training_sha256": "ac300ae8ba1fadaa9ab589f9c92a9b02e404935a42a9388fa5cf2842e3ca29e6",
+  "portable_sha256": "c9441b178667b63c21acdf22bc5dc3676f2b1d9c23cac4f7fed598ba3f48772d",
+  "tensor_count": 499,
+  "all_tensor_values_and_dtypes_equal": true
+}
